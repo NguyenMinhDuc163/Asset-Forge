@@ -1,0 +1,16 @@
+.git
+.github
+.next
+node_modules
+.contentforge
+.tmp-*
+generated-assets
+coverage
+.idea
+.agents
+*.log
+.env*
+Dockerfile*
+docker-compose*.yml
+ContentForge_MVP_SPEC.md
+skills-lock.json

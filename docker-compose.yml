@@ -1,0 +1,31 @@
+name: asset-forge
+
+services:
+  app:
+    image: nguyenduc1603/asset-forge:${ASSET_FORGE_TAG:-latest}
+    container_name: asset-forge
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "${CONTENTFORGE_PORT:-3000}:3000"
+      - "127.0.0.1:1455:1455"
+    environment:
+      NODE_ENV: production
+      CONTENTFORGE_HOME: /data/.contentforge
+      CONTENTFORGE_EXPORT_ROOT: /data/exports
+      CONTENTFORGE_OAUTH_HOST: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size=768
+    volumes:
+      - contentforge-data:/data
+    mem_limit: 1g
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  contentforge-data:
+    name: asset-forge-data
