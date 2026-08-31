@@ -131,6 +131,47 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
+.info-tip {
+  position: relative;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+.info-tip-bubble {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 10px);
+  left: 50%;
+  width: min(250px, calc(100vw - 32px));
+  padding: 10px 12px;
+  transform: translate(-50%, -4px);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.info-tip:hover .info-tip-bubble, .info-tip:focus-visible .info-tip-bubble {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
 .preview-grid {
   background-color: var(--grid-base);
   background-image: linear-gradient(45deg, var(--grid-mark) 25%, transparent 25%), linear-gradient(-45deg, var(--grid-mark) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--grid-mark) 75%), linear-gradient(-45deg, transparent 75%, var(--grid-mark) 75%);

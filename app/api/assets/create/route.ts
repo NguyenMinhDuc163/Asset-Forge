@@ -4,11 +4,13 @@ import { getAdapter } from "@/core/adapters";
 import { normalizeImage } from "@/core/image/normalize";
 import { ManualImageProvider } from "@/core/providers/manual-provider";
 import { OpenAIImageProvider } from "@/core/providers/openai-provider";
+import { CodexOAuthImageProvider } from "@/core/providers/codex-oauth-provider";
 import { NineRouterImageProvider } from "@/core/providers/nine-router-provider";
 import type { GeneratedVisual } from "@/core/providers/types";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { discoverNineRouterImageModels } from "@/lib/nine-router/client";
+import { codexImageModels } from "@/lib/codex/client";
 import { getNineRouterKey, getOpenAIKey, getSettings } from "@/lib/storage/settings";
 import { saveGeneration } from "@/lib/storage/generations";
 
@@ -43,19 +45,22 @@ export async function POST(request: Request) {
       visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
     } else if (settings.provider === "openai") {
       if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
-      const apiKey = await getOpenAIKey();
-      if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
-      const availableModels = await discoverImageModels(apiKey);
-      const model = resolveImageModel(settings.imageModel, availableModels);
-      visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
+      if (settings.openaiAuthMode === "codex-oauth") {
+        const model = settings.imageModel === "auto" ? codexImageModels[0].id : settings.imageModel;
+        visual = await new CodexOAuthImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
+      } else {
+        const apiKey = await getOpenAIKey();
+        if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
+        const availableModels = await discoverImageModels(apiKey);
+        const model = resolveImageModel(settings.imageModel, availableModels);
+        visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
+      }
     } else {
       if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
       const apiKey = await getNineRouterKey();
       const availableModels = await discoverNineRouterImageModels(settings.nineRouterUrl, apiKey);
       const model = settings.imageModel === "auto" ? availableModels[0]?.id : settings.imageModel;
-      if (!model || !availableModels.some((item) => item.id === model)) {
-        return NextResponse.json({ message: "Model ảnh đã chọn không khả dụng trong 9Router." }, { status: 400 });
-      }
+      if (!model) return NextResponse.json({ message: "Hãy nhập model ảnh 9Router." }, { status: 400 });
       visual = await new NineRouterImageProvider(settings.nineRouterUrl, apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
     }
     const normalized = await normalizeImage(visual.buffer, adapter.getNormalizeOptions(context));
@@ -77,6 +82,10 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.name === "NineRouterError") {
       console.error("9Router asset generation failed", error);
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+    if (error instanceof Error && error.name === "CodexOAuthError") {
+      console.error("Codex OAuth asset generation failed", error);
       return NextResponse.json({ message: error.message }, { status: 400 });
     }
     const friendlyError = toOpenAIProviderError(error);

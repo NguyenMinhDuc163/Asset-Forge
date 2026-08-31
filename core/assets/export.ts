@@ -1,9 +1,29 @@
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
+import JSZip from "jszip";
 import { getGeneration } from "@/lib/storage/generations";
 import { safeAssetName, safeJoin } from "@/lib/fs/safe-path";
 
 export interface ExportResult { directory: string; files: string[] }
+
+function packageReadme(adapterId: string, name: string) {
+  return [
+    "# ContentForge asset package", "", `Adapter: ${adapterId}`, `Tài nguyên: ${name}`, "",
+    "Dùng asset.manifest.json làm điểm vào của gói. Các file tích hợp riêng của adapter nằm trong integration/ khi có.",
+    "ContentForge không ghi đè tài nguyên game gốc. Hãy chủ động copy hoặc import các file đã tạo.", "",
+  ].join("\n");
+}
+
+export async function createGenerationArchive(generationId: string) {
+  const { root, record } = await getGeneration(generationId);
+  if (!record.validation.ready) throw new Error("Kết quả chưa vượt qua kiểm tra adapter nên không thể export.");
+  const files = [...new Set([record.source.file, record.visual.file, ...record.files.map((file) => file.path)])];
+  const zip = new JSZip();
+  for (const path of files) zip.file(path, await readFile(safeJoin(root, path)));
+  zip.file("asset.manifest.json", `${JSON.stringify(record, null, 2)}\n`);
+  zip.file("integration/README.md", packageReadme(record.adapter.id, record.name));
+  return { filename: `${safeAssetName(record.name)}.zip`, buffer: await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } }) };
+}
 
 async function createAvailableDirectory(outputRoot: string, preferredName: string) {
   for (let suffix = 1; suffix <= 999; suffix += 1) {
@@ -37,16 +57,7 @@ export async function exportGeneration(generationId: string, projectRoot: string
 
   const manifest = { ...record, project: safeAssetName(absoluteProjectRoot.split(/[\\/]/).at(-1) || "game-project") };
   await writeFile(safeJoin(destination, "asset.manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  const readme = [
-    "# ContentForge asset package",
-    "",
-    `Adapter: ${record.adapter.id}`,
-    `Tài nguyên: ${record.name}`,
-    "",
-    "Dùng asset.manifest.json làm điểm vào của gói. Các file tích hợp riêng của adapter nằm trong integration/ khi có.",
-    "ContentForge không ghi đè tài nguyên game gốc. Hãy chủ động copy hoặc import các file đã tạo.",
-    "",
-  ].join("\n");
+  const readme = packageReadme(record.adapter.id, record.name);
   await mkdir(safeJoin(destination, "integration"), { recursive: true });
   await writeFile(safeJoin(destination, "integration/README.md"), readme, "utf8");
 

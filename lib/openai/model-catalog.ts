@@ -31,8 +31,7 @@ export function resolveImageModel(selected: string, available: FriendlyImageMode
     if (!best) throw new Error("Khóa API này chưa có quyền dùng mô hình tạo ảnh được hỗ trợ.");
     return best.id;
   }
-  if (!available.some((model) => model.id === selected)) {
-    throw new Error("Mô hình ảnh đã chọn không khả dụng với khóa API này.");
-  }
-  return selected;
+  const custom = selected.trim();
+  if (!custom) throw new Error("Hãy nhập model ảnh hoặc chọn Tự động.");
+  return custom;
 }

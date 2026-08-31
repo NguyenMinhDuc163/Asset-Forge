@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "next": "16.3.3",
     "openai": "^7.8.0",
     "react": "19.2.8",
@@ -24,5 +25,9 @@
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3"
   }
 }

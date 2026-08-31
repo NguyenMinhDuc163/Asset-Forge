@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { exportGeneration } from "@/core/assets/export";
+import { createGenerationArchive, exportGeneration } from "@/core/assets/export";
 import { getSettings } from "@/lib/storage/settings";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const { generationId } = await request.json() as { generationId?: string };
+    const { generationId, delivery } = await request.json() as { generationId?: string; delivery?: "browser" | "server" };
     if (!generationId) return NextResponse.json({ message: "Chưa có kết quả để export." }, { status: 400 });
+    if (delivery === "browser") {
+      const archive = await createGenerationArchive(generationId);
+      return new Response(new Uint8Array(archive.buffer), { headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${archive.filename}"`, "Content-Length": String(archive.buffer.byteLength) } });
+    }
     const settings = await getSettings();
-    if (!settings.projectRoot) return NextResponse.json({ message: "Hãy chọn thư mục game project trong Cài đặt trước khi export." }, { status: 400 });
     const result = await exportGeneration(generationId, settings.projectRoot);
     return NextResponse.json({ message: "Đã export gói tài nguyên sẵn sàng cho game.", ...result });
   } catch (error) {

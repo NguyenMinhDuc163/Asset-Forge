@@ -21,6 +21,7 @@ export function createProjectProfile(rootPath: string, adapterId: string): Proje
 
 export async function ensureProjectProfile(rootPath: string, adapterId: string): Promise<ProjectProfile> {
   const profile = createProjectProfile(rootPath, adapterId);
+  await mkdir(profile.rootPath, { recursive: true });
   try {
     if (!(await stat(profile.rootPath)).isDirectory()) throw new Error();
   } catch {

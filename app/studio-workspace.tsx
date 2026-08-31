@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { SettingsPanel } from "./settings-panel";
-import type { ProviderId, ThemePreference } from "@/lib/storage/settings";
+import type { ExportMode, ProviderId, ThemePreference } from "@/lib/storage/settings";
 import { getCopy, type Locale } from "@/lib/i18n";
 
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
 type AssetKind = (typeof assetKinds)[number];
 type StudioState = "empty" | "creating" | "ready" | "error";
+interface BrowserFileHandle { createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }
+interface BrowserDirectoryHandle { name: string; getFileHandle(name: string, options: { create: boolean }): Promise<BrowserFileHandle> }
 
 export function StudioWorkspace() {
   const [locale, setLocale] = useState<Locale>("vi");
@@ -21,6 +23,8 @@ export function StudioWorkspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderId>("openai");
   const [theme, setTheme] = useState<ThemePreference>("system");
+  const [exportMode, setExportMode] = useState<ExportMode>("download");
+  const [directoryHandle, setDirectoryHandle] = useState<BrowserDirectoryHandle | null>(null);
   const [projectLabel, setProjectLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [resultMeta, setResultMeta] = useState({ adapter: "NRO Legacy", width: 64, height: 128, checks: [] as string[] });
@@ -29,19 +33,20 @@ export function StudioWorkspace() {
   const [exportMessage, setExportMessage] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string; theme: ThemePreference }) => {
+  const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string; theme: ThemePreference; exportMode: ExportMode }) => {
     setProvider(settings.provider);
     setLocale(settings.locale);
     setProjectLabel(settings.projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "");
     setTheme(settings.theme);
     document.documentElement.dataset.theme = settings.theme;
+    setExportMode(settings.exportMode);
   }, []);
 
   useEffect(() => {
     let active = true;
     fetch("/api/settings")
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((settings: { provider: ProviderId; locale?: Locale; projectRoot?: string; theme?: ThemePreference }) => {
+      .then((settings: { provider: ProviderId; locale?: Locale; projectRoot?: string; theme?: ThemePreference; exportMode?: ExportMode }) => {
         if (!active) return;
         setProvider(settings.provider);
         setLocale(settings.locale || "vi");
@@ -50,6 +55,7 @@ export function StudioWorkspace() {
         setTheme(nextTheme);
         localStorage.setItem("contentforge-theme", nextTheme);
         document.documentElement.dataset.theme = nextTheme;
+        setExportMode(settings.exportMode || "download");
       })
       .catch(() => undefined);
     return () => { active = false; };
@@ -107,11 +113,29 @@ export function StudioWorkspace() {
     setExportStatus("exporting");
     setErrorMessage("");
     try {
-      const response = await fetch("/api/assets/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ generationId }) });
-      const result = await response.json() as { message?: string; directory?: string };
-      if (!response.ok) throw new Error(result.message || t.exportError);
+      const response = await fetch("/api/assets/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ generationId, delivery: "browser" }) });
+      if (!response.ok) {
+        const result = await response.json() as { message?: string };
+        throw new Error(result.message || t.exportError);
+      }
+      const blob = await response.blob();
+      const filename = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] || "contentforge-asset.zip";
+      if (exportMode === "browser-folder" && directoryHandle) {
+        const file = await directoryHandle.getFileHandle(filename, { create: true });
+        const writer = await file.createWritable();
+        await writer.write(blob);
+        await writer.close();
+        setExportMessage(`${directoryHandle.name}/${filename}`);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        setExportMessage(filename);
+      }
       setExportStatus("done");
-      setExportMessage(result.directory || result.message || t.exportComplete);
     } catch (error) {
       setExportStatus("idle");
       setErrorMessage(error instanceof Error ? error.message : t.exportError);
@@ -131,6 +155,36 @@ export function StudioWorkspace() {
     localStorage.setItem("contentforge-theme", nextTheme);
     document.documentElement.dataset.theme = nextTheme;
     await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme: nextTheme }) }).catch(() => undefined);
+  }
+
+  async function changeProvider(nextProvider: ProviderId) {
+    setProvider(nextProvider);
+    setStudioState("empty");
+    await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: nextProvider, imageModel: "auto" }) }).catch(() => undefined);
+  }
+
+  async function chooseExportFolder() {
+    const picker = (window as Window & { showDirectoryPicker?: (options?: { mode?: "readwrite" }) => Promise<BrowserDirectoryHandle> }).showDirectoryPicker;
+    if (!picker) {
+      setExportMode("download");
+      setExportMessage(t.folderApiUnavailable);
+      return;
+    }
+    try {
+      const handle = await picker({ mode: "readwrite" });
+      setDirectoryHandle(handle);
+      setExportMode("browser-folder");
+      setExportMessage(`${t.folderSelected}: ${handle.name}`);
+      await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exportMode: "browser-folder" }) }).catch(() => undefined);
+    } catch (error) {
+      if ((error as DOMException).name !== "AbortError") setExportMessage(t.folderApiUnavailable);
+    }
+  }
+
+  async function useBrowserDownload() {
+    setExportMode("download");
+    setDirectoryHandle(null);
+    await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exportMode: "download" }) }).catch(() => undefined);
   }
 
   return (
@@ -159,7 +213,13 @@ export function StudioWorkspace() {
         <section className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{t.newAsset}</p>
-            <h1 className="text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">{t.whatMake}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">{t.whatMake}</h1>
+              <button type="button" className="info-tip" aria-label={t.usageHelp}>
+                <span aria-hidden="true">?</span>
+                <span className="info-tip-bubble" role="tooltip">{t.usageTooltip}</span>
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-1 rounded-[14px] bg-[var(--soft)] p-1 sm:flex" aria-label={t.assetType}>
             {assetKinds.map((kind) => (
@@ -181,6 +241,13 @@ export function StudioWorkspace() {
             <div className="mb-7">
               <h2 className="mb-1 text-lg font-semibold tracking-[-0.025em]">{t.shapeIdea}</h2>
               <p className="text-sm leading-6 text-[var(--muted)]">{t.shapeDescription}</p>
+            </div>
+
+            <div className="mb-6">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--faint)]">{t.generationSource}</p>
+              <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-[var(--soft)] p-1">
+                {(["manual", "openai", "nine-router"] as const).map((item) => <button key={item} type="button" aria-pressed={provider === item} onClick={() => changeProvider(item)} className={`min-h-10 rounded-[9px] px-2 text-xs font-semibold transition ${provider === item ? "bg-[var(--surface)] text-[var(--ink)] shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>{item === "manual" ? t.noAi : item === "openai" ? t.openai : t.nineRouter}</button>)}
+              </div>
             </div>
 
             <label className="mb-3 text-sm font-semibold" htmlFor="asset-prompt">{t.describe} {t[assetKind.toLowerCase() as "character" | "environment" | "item" | "effect"].toLowerCase()}</label>
@@ -255,9 +322,16 @@ export function StudioWorkspace() {
             <div className="mt-4 min-h-16">
               {errorMessage && <div className="mb-3 rounded-[10px] bg-[var(--error-soft)] px-3 py-2 text-sm text-[var(--error)]" role="alert">{errorMessage}</div>}
               {studioState === "ready" ? (
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div><p className="text-sm font-semibold text-[var(--success)]">{t.ready}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
                   <div className="flex gap-2"><button type="button" className="control-button" onClick={() => setStudioState("empty")}>{t.tryAnother}</button><button type="button" className="primary-button px-6" onClick={exportAsset} disabled={exportStatus === "exporting"}>{exportStatus === "exporting" ? t.exporting : t.export}</button></div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
+                    <span className="mr-1 text-xs font-semibold text-[var(--muted)]">{t.exportDestination}</span>
+                    <button type="button" className={`control-button min-h-9 ${exportMode === "download" ? "border-[var(--accent)]" : ""}`} onClick={useBrowserDownload}>{t.browserDownload}</button>
+                    <button type="button" className={`control-button min-h-9 ${exportMode === "browser-folder" ? "border-[var(--accent)]" : ""}`} onClick={chooseExportFolder}>{directoryHandle ? `${t.folderSelected}: ${directoryHandle.name}` : t.chooseFolder}</button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between text-xs text-[var(--muted)]"><span>{t.previewReflects}</span><span className="font-mono">PNG</span></div>

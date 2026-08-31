@@ -87,6 +87,17 @@ export class NroLegacyAdapter implements AssetAdapter {
   }
 
   async validate(output: AdapterOutput) {
+    if (output.kind !== "character") {
+      const spriteReady = output.files.some((file) => file.path === "sprites/asset.png" && file.mimeType === "image/png");
+      return {
+        ready: spriteReady,
+        checks: [
+          { id: "format", label: "Định dạng PNG hợp lệ", passed: spriteReady },
+          { id: "sprite", label: "Sprite NRO đã tạo", passed: spriteReady },
+          { id: "metadata", label: "Metadata SmallImage đã tạo", passed: Array.isArray(output.metadata.smallImages) },
+        ],
+      };
+    }
     const required = ["sprites/head.png", "sprites/body.png", "sprites/legs.png", "atlas.png", "integration/small-images.json"];
     const available = new Set(output.files.map((file) => file.path));
     const partsReady = required.every((path) => available.has(path));
