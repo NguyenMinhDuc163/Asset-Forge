@@ -41,10 +41,10 @@ export async function exportGeneration(generationId: string, projectRoot: string
     "# ContentForge asset package",
     "",
     `Adapter: ${record.adapter.id}`,
-    `Asset: ${record.name}`,
+    `Tài nguyên: ${record.name}`,
     "",
-    "Use asset.manifest.json as the package entry point. Adapter-specific integration files are inside integration/ when available.",
-    "ContentForge never writes over original game assets. Copy or import these generated files explicitly.",
+    "Dùng asset.manifest.json làm điểm vào của gói. Các file tích hợp riêng của adapter nằm trong integration/ khi có.",
+    "ContentForge không ghi đè tài nguyên game gốc. Hãy chủ động copy hoặc import các file đã tạo.",
     "",
   ].join("\n");
   await mkdir(safeJoin(destination, "integration"), { recursive: true });

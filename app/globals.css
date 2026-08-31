@@ -7,12 +7,12 @@
   --soft: #e7e2d9;
   --ink: #25211c;
   --muted: #6e675e;
-  --faint: #9c9388;
+  --faint: #736c63;
   --line: #ded8cf;
   --line-strong: #cfc7bc;
-  --accent: #c65f2d;
+  --accent: #bd5528;
   --accent-strong: #99421f;
-  --accent-soft: rgba(198, 95, 45, 0.14);
+  --accent-soft: rgba(189, 85, 40, 0.14);
   --success: #35694d;
 }
 
@@ -61,7 +61,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 5px 16px rgba(153, 66, 31, 0.16);
   transition: background-color 160ms ease, transform 100ms ease, opacity 160ms ease;
 }
-.primary-button:hover:not(:disabled) { background: #b85226; }
+.primary-button:hover:not(:disabled) { background: #a94820; }
 .primary-button:disabled { cursor: not-allowed; opacity: 0.46; }
 
 .field {

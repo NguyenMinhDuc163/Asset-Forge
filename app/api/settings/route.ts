@@ -3,6 +3,7 @@ import { autoModel, discoverImageModels, resolveImageModel } from "@/lib/openai/
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { getSettings, hasOpenAIKey, saveOpenAIKey, saveSettings, type ProviderId } from "@/lib/storage/settings";
 import { ensureProjectProfile } from "@/lib/storage/projects";
+import type { Locale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const body = (await request.json()) as { provider?: ProviderId; apiKey?: string; imageModel?: string; projectRoot?: string; adapterId?: string };
+    const body = (await request.json()) as { provider?: ProviderId; apiKey?: string; imageModel?: string; projectRoot?: string; adapterId?: string; locale?: Locale };
     if (body.provider && !["openai", "manual"].includes(body.provider)) {
       return NextResponse.json({ message: "Choose a supported provider." }, { status: 400 });
     }
@@ -28,16 +29,25 @@ export async function PUT(request: Request) {
       }
       await saveOpenAIKey(body.apiKey);
     }
+    const currentSettings = await getSettings();
+    const nextProjectRoot = typeof body.projectRoot === "string" ? body.projectRoot.trim() : currentSettings.projectRoot;
+    const nextAdapterId = body.adapterId || currentSettings.adapterId;
+    if (nextProjectRoot && (body.projectRoot !== undefined || body.adapterId !== undefined)) {
+      await ensureProjectProfile(nextProjectRoot, nextAdapterId);
+    }
     const settings = await saveSettings({
       ...(body.provider ? { provider: body.provider } : {}),
       ...(body.imageModel ? { imageModel: body.imageModel } : {}),
       ...(typeof body.projectRoot === "string" ? { projectRoot: body.projectRoot.trim() } : {}),
       ...(body.adapterId ? { adapterId: body.adapterId } : {}),
+      ...(body.locale && ["vi", "en"].includes(body.locale) ? { locale: body.locale } : {}),
     });
-    if (settings.projectRoot) await ensureProjectProfile(settings.projectRoot, settings.adapterId);
     return NextResponse.json({ ...settings, apiKeyConfigured: await hasOpenAIKey(), ...(compatibleModels ? { models: [autoModel, ...compatibleModels] } : {}) });
   } catch (error) {
     console.error("Could not save ContentForge settings", error);
-    return NextResponse.json({ message: "Settings could not be saved. Check that ContentForge can write to your user folder." }, { status: 500 });
+    const message = error instanceof Error && error.message.startsWith("Thư mục game project")
+      ? error.message
+      : "Không thể lưu cài đặt. Hãy kiểm tra quyền ghi vào thư mục người dùng.";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

@@ -18,7 +18,7 @@ export function toOpenAIProviderError(error: unknown): OpenAIProviderError {
     if (error.status && error.status >= 500) return new OpenAIProviderError("Dịch vụ tạo ảnh đang tạm thời không khả dụng. Hãy thử lại sau.", error.message);
     return new OpenAIProviderError("OpenAI không thể tạo ảnh này. Hãy kiểm tra mô hình hoặc thử mô tả khác.", error.message);
   }
-  if (error instanceof Error && /^(Add a source|Khóa API|Mô hình ảnh)/.test(error.message)) {
+  if (error instanceof Error && /^(Thêm ảnh nguồn|Khóa API|Mô hình ảnh)/.test(error.message)) {
     return new OpenAIProviderError(error.message, error.message);
   }
   return new OpenAIProviderError("Không thể kết nối với OpenAI. Hãy kiểm tra mạng rồi thử lại.", error instanceof Error ? error.message : String(error));

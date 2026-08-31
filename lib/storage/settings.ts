@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { Locale } from "@/lib/i18n";
 
 export type ProviderId = "openai" | "manual";
 
@@ -9,11 +10,12 @@ export interface AppSettings {
   imageModel: string;
   projectRoot: string;
   adapterId: string;
+  locale: Locale;
 }
 
 interface AppSecrets { openaiApiKey?: string }
 
-const defaults: AppSettings = { provider: "openai", imageModel: "auto", projectRoot: "", adapterId: "nro-legacy-v1" };
+const defaults: AppSettings = { provider: "openai", imageModel: "auto", projectRoot: "", adapterId: "nro-legacy-v1", locale: "vi" };
 
 function configRoot() { return process.env.CONTENTFORGE_HOME || join(homedir(), ".contentforge"); }
 function settingsPath() { return join(configRoot(), "settings.json"); }

@@ -8,7 +8,7 @@ export class ManualImageProvider implements AssetGenerationProvider {
 
   async generate(input: ProviderGenerateInput) {
     if (!input.referenceImage || !input.referenceMimeType) {
-      throw new Error("Add a source image to use No-AI mode.");
+      throw new Error("Thêm ảnh nguồn để dùng chế độ Không AI.");
     }
     return { buffer: input.referenceImage, mimeType: input.referenceMimeType, provider: this.id };
   }

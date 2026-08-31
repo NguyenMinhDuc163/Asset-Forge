@@ -60,6 +60,10 @@ export async function POST(request: Request) {
       validation,
     });
   } catch (error) {
+    if (error instanceof Error && /^(Ảnh nguồn|Không thể xác định|Thêm ảnh nguồn|Đường dẫn)/.test(error.message)) {
+      console.error("Deterministic asset processing failed", error);
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
     const friendlyError = toOpenAIProviderError(error);
     console.error("Asset generation failed", friendlyError.developerMessage || error);
     return NextResponse.json({ message: friendlyError.message }, { status: 400 });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { autoModel, discoverImageModels } from "@/lib/openai/model-catalog";
+import { autoModel, discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { getOpenAIKey } from "@/lib/storage/settings";
 
@@ -10,6 +10,7 @@ export async function GET() {
   if (!apiKey) return NextResponse.json({ message: "Hãy lưu khóa OpenAI trước khi tải danh sách mô hình." }, { status: 400 });
   try {
     const models = await discoverImageModels(apiKey);
+    resolveImageModel("auto", models);
     return NextResponse.json({ models: [autoModel, ...models] });
   } catch (error) {
     const friendlyError = toOpenAIProviderError(error);
