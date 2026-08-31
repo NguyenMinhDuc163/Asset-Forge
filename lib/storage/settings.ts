@@ -8,6 +8,7 @@ export type { ProviderId } from "@/core/providers/catalog";
 export type ThemePreference = "light" | "dark" | "system";
 export type OpenAIAuthMode = "api-key" | "codex-oauth";
 export type ExportMode = "download" | "browser-folder";
+export type CreationMode = "auto" | "ai" | "template";
 
 export interface AppSettings {
   provider: ProviderId;
@@ -19,6 +20,7 @@ export interface AppSettings {
   locale: Locale;
   theme: ThemePreference;
   exportMode: ExportMode;
+  creationMode: CreationMode;
 }
 
 export interface CodexOAuthTokens {
@@ -32,7 +34,7 @@ export interface CodexOAuthTokens {
 
 interface AppSecrets { openaiApiKey?: string; nineRouterApiKey?: string; codexOAuth?: CodexOAuthTokens }
 
-const defaults: AppSettings = { provider: "openai", imageModel: "auto", openaiAuthMode: "api-key", nineRouterUrl: "http://localhost:20128", projectRoot: process.env.CONTENTFORGE_EXPORT_ROOT || join(homedir(), "ContentForge", "exports"), adapterId: "nro-legacy-v1", locale: "vi", theme: "system", exportMode: "download" };
+const defaults: AppSettings = { provider: "openai", imageModel: "auto", openaiAuthMode: "api-key", nineRouterUrl: "http://localhost:20128", projectRoot: process.env.CONTENTFORGE_EXPORT_ROOT || join(homedir(), "ContentForge", "exports"), adapterId: "nro-legacy-v1", locale: "vi", theme: "system", exportMode: "download", creationMode: "auto" };
 
 function configRoot() { return process.env.CONTENTFORGE_HOME || join(homedir(), ".contentforge"); }
 function settingsPath() { return join(configRoot(), "settings.json"); }

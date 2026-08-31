@@ -1,0 +1,11 @@
+{
+  "id": "nro-humanoid-v1",
+  "name": "NRO Humanoid",
+  "referenceCharacter": { "headPartId": 64, "bodyPartId": 1, "legPartId": 2 },
+  "canonicalDirection": "right",
+  "partOrder": ["head", "body", "leg"],
+  "requiredStates": ["idle", "run", "jump", "fall", "attack", "hurt"],
+  "frameCanvas": { "width": 64, "height": 64 },
+  "previewCanvas": { "width": 64, "height": 128 },
+  "notes": "Template metadata mirrors the current game's head/body/leg composition. Art is rendered deterministically by the ContentForge template engine."
+}

@@ -3,7 +3,7 @@ import { isProviderId } from "@/core/providers/catalog";
 import { autoModel, discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverNineRouterImageModels, NineRouterError, normalizeNineRouterUrl } from "@/lib/nine-router/client";
-import { getNineRouterKey, getSettings, hasCodexOAuth, hasNineRouterKey, hasOpenAIKey, saveNineRouterKey, saveOpenAIKey, saveSettings, type ExportMode, type OpenAIAuthMode, type ProviderId, type ThemePreference } from "@/lib/storage/settings";
+import { getNineRouterKey, getSettings, hasCodexOAuth, hasNineRouterKey, hasOpenAIKey, saveNineRouterKey, saveOpenAIKey, saveSettings, type CreationMode, type ExportMode, type OpenAIAuthMode, type ProviderId, type ThemePreference } from "@/lib/storage/settings";
 import { ensureProjectProfile } from "@/lib/storage/projects";
 import type { Locale } from "@/lib/i18n";
 
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const body = (await request.json()) as { provider?: ProviderId; apiKey?: string; openaiAuthMode?: OpenAIAuthMode; nineRouterApiKey?: string; nineRouterUrl?: string; imageModel?: string; projectRoot?: string; adapterId?: string; locale?: Locale; theme?: ThemePreference; exportMode?: ExportMode };
+    const body = (await request.json()) as { provider?: ProviderId; apiKey?: string; openaiAuthMode?: OpenAIAuthMode; nineRouterApiKey?: string; nineRouterUrl?: string; imageModel?: string; projectRoot?: string; adapterId?: string; locale?: Locale; theme?: ThemePreference; exportMode?: ExportMode; creationMode?: CreationMode };
     if (body.provider && !isProviderId(body.provider)) {
       return NextResponse.json({ message: "Choose a supported provider." }, { status: 400 });
     }
@@ -61,6 +61,7 @@ export async function PUT(request: Request) {
       ...(body.locale && ["vi", "en"].includes(body.locale) ? { locale: body.locale } : {}),
       ...(body.theme && ["light", "dark", "system"].includes(body.theme) ? { theme: body.theme } : {}),
       ...(body.exportMode && ["download", "browser-folder"].includes(body.exportMode) ? { exportMode: body.exportMode } : {}),
+      ...(body.creationMode && ["auto", "ai", "template"].includes(body.creationMode) ? { creationMode: body.creationMode } : {}),
     });
     const [apiKeyConfigured, nineRouterKeyConfigured, codexOAuthConfigured] = await Promise.all([hasOpenAIKey(), hasNineRouterKey(), hasCodexOAuth()]);
     const returnedModels = compatibleModels

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import type { ExportMode, OpenAIAuthMode, ProviderId, ThemePreference } from "@/lib/storage/settings";
+import type { CreationMode, ExportMode, OpenAIAuthMode, ProviderId, ThemePreference } from "@/lib/storage/settings";
 import { getCopy, type Locale } from "@/lib/i18n";
 
 interface SettingsData {
@@ -17,6 +17,7 @@ interface SettingsData {
   locale: Locale;
   theme: ThemePreference;
   exportMode: ExportMode;
+  creationMode: CreationMode;
   models?: FriendlyModel[];
 }
 
@@ -42,6 +43,7 @@ const initialSettings: SettingsData = {
   locale: "vi",
   theme: "system",
   exportMode: "download",
+  creationMode: "auto",
 };
 
 export function SettingsPanel({ open, onClose, onSaved, locale }: SettingsPanelProps) {
@@ -230,6 +232,20 @@ export function SettingsPanel({ open, onClose, onSaved, locale }: SettingsPanelP
               </select>
             </label>
           </div>
+
+          <details className="border-t border-[var(--line)] pt-5">
+            <summary className="cursor-pointer text-sm font-semibold">{t.advanced}</summary>
+            <div className="mt-4">
+              <label className="block text-sm font-semibold">{t.creationMode}
+                <select className="field mt-2" value={settings.creationMode} onChange={(event) => setSettings({ ...settings, creationMode: event.target.value as CreationMode })}>
+                  <option value="auto">{t.modeAuto}</option>
+                  <option value="ai">{t.modeAi}</option>
+                  <option value="template">{t.modeTemplate}</option>
+                </select>
+              </label>
+              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{t.creationModeHelp}</p>
+            </div>
+          </details>
 
           <div className="border-t border-[var(--line)] pt-5">
             <p className="mb-4 text-sm font-semibold">{t.appearance}</p>

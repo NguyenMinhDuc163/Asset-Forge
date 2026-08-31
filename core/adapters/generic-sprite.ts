@@ -1,4 +1,4 @@
-import type { AssetAdapter, AdapterContext, AdapterOutput } from "./types";
+import type { AssetAdapter, AdapterContext, AdapterOutput, ValidationResult } from "./types";
 import type { NormalizedAsset } from "../assets/types";
 import { getDefaultNormalizeOptions } from "../image/normalize";
 
@@ -25,10 +25,12 @@ export class GenericSpriteAdapter implements AssetAdapter {
     };
   }
 
-  async validate(output: AdapterOutput) {
+  async validate(output: AdapterOutput): Promise<ValidationResult> {
+    const status: ValidationResult["status"] = output.files.some((file) => file.path === "processed.png") && output.preview.width > 0 && output.preview.height > 0 && Boolean(output.metadata.sprite) ? "game-ready" : "draft";
     const image = output.files.find((file) => file.path === "processed.png");
     return {
       ready: Boolean(image),
+      status,
       checks: [
         { id: "format", label: "Định dạng PNG hợp lệ", passed: Boolean(image) },
         { id: "dimensions", label: "Kích thước đã chuẩn hóa", passed: output.preview.width > 0 && output.preview.height > 0 },
