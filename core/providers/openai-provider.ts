@@ -16,7 +16,7 @@ export class OpenAIImageProvider implements AssetGenerationProvider {
     const prompt = [
       input.prompt?.trim() || "Adapt the supplied image into a clean game asset.",
       input.generationRecipe,
-      "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background.",
+      input.generationRecipe?.includes("pose sheet") ? "Preserve the complete pose sheet grid with no text or extra characters and a transparent background." : "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background.",
     ].filter(Boolean).join("\n\n");
 
     try {

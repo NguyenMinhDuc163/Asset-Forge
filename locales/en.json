@@ -128,5 +128,6 @@
   "stagePreparing": "Preparing the design",
   "stageDesign": "Matching the game style",
   "stageFrames": "Creating movement frames",
-  "stageValidation": "Validating the output"
+  "stageValidation": "Validating the output",
+  "exportNeedsReady": "Game Ready is required before export"
 }

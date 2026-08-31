@@ -1,7 +1,7 @@
 import type { AppSettings } from "@/lib/storage/settings";
 import { getNineRouterKey, getOpenAIKey, hasCodexOAuth } from "@/lib/storage/settings";
 import { normalizeImage } from "@/core/image/normalize";
-import { createDesignMasterCharacter, createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
+import { createDesignMasterCharacter, createPoseSheetCharacter, createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
 import { generateVisual } from "@/core/providers/generate";
 import type { GeneratedVisual } from "@/core/providers/types";
 import type { CharacterAsset, CharacterGenerationMode } from "./types";
@@ -22,11 +22,12 @@ export interface CharacterCreationResult {
   visual: GeneratedVisual;
   normalized: Awaited<ReturnType<typeof normalizeImage>>;
   asset: CharacterAsset;
+  poseSheet?: GeneratedVisual;
 }
 
 export function createCharacterRequestHash(input: Pick<CharacterCreationInput, "prompt" | "referenceImage" | "settings" | "generationRecipe"> & { aiAccess?: boolean }) {
   const hash = createHash("sha256");
-  hash.update("character-pipeline-v2\0");
+  hash.update("character-pipeline-v2.1-design-master-pose-sheet\0");
   hash.update(input.settings.provider);
   hash.update("\0");
   hash.update(input.settings.imageModel);
@@ -85,6 +86,25 @@ export async function createCharacter(input: CharacterCreationInput): Promise<Ch
   if (!await isHumanoidCompatible(normalized.buffer)) {
     throw new Error("Ảnh nguồn AI không tạo ra silhouette humanoid phù hợp với template game.");
   }
-  const template = await createDesignMasterCharacter({ name: input.name, designMaster: normalized.buffer, prompt: input.prompt });
-  return { mode, visual, normalized, asset: template.asset };
+  let poseSheet: GeneratedVisual | undefined;
+  try {
+    poseSheet = await generateVisual(input.settings.provider, {
+      settings: input.settings,
+      kind: "character",
+      prompt: input.prompt,
+      referenceImage: normalized.buffer,
+      referenceMimeType: "image/png",
+      generationRecipe: [
+        "Create a 4 by 3 transparent pose sheet of the exact same character from the reference design master.",
+        "Use this exact cell order left-to-right, top-to-bottom: idle-0, idle-1, run-0, run-1, run-2, jump, fall, hurt, attack-0, attack-1, attack-2, fly.",
+        "Keep the same hairstyle, face, clothing, colors, proportions and readable pixel-art silhouette in every cell. No labels, borders, scenery or extra characters.",
+      ].join(" "),
+    });
+    const generated = await createPoseSheetCharacter({ name: input.name, poseSheet: poseSheet.buffer, prompt: input.prompt });
+    return { mode, visual, normalized, asset: generated.asset, poseSheet };
+  } catch (error) {
+    console.warn("AI pose sheet was not usable; using deterministic template transfer", error instanceof Error ? error.message : error);
+    const template = await createDesignMasterCharacter({ name: input.name, designMaster: normalized.buffer, prompt: input.prompt });
+    return { mode, visual, normalized, asset: template.asset };
+  }
 }

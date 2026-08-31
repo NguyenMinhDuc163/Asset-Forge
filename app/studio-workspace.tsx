@@ -384,8 +384,8 @@ export function StudioWorkspace() {
               {studioState === "ready" ? (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className="text-sm font-semibold text-[var(--success)]">{resultMeta.status === "game-ready" ? t.gameReady : resultMeta.status === "playable" ? t.playable : t.draft}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
-                  <div className="flex gap-2"><button type="button" className="control-button" onClick={() => setStudioState("empty")}>{t.tryAnother}</button><button type="button" className="primary-button px-6" onClick={exportAsset} disabled={exportStatus === "exporting"}>{exportStatus === "exporting" ? t.exporting : t.export}</button></div>
+                  <div><p className={`text-sm font-semibold ${resultMeta.status === "game-ready" ? "text-[var(--success)]" : resultMeta.status === "playable" ? "text-[var(--accent-strong)]" : "text-[var(--muted)]"}`}>{resultMeta.status === "game-ready" ? t.gameReady : resultMeta.status === "playable" ? t.playable : t.draft}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
+                  <div className="flex gap-2"><button type="button" className="control-button" onClick={() => setStudioState("empty")}>{t.tryAnother}</button><button type="button" className="primary-button px-6" onClick={exportAsset} disabled={exportStatus === "exporting" || resultMeta.status !== "game-ready"} title={resultMeta.status !== "game-ready" ? t.exportNeedsReady : undefined}>{exportStatus === "exporting" ? t.exporting : t.export}</button></div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
                     <span className="mr-1 text-xs font-semibold text-[var(--muted)]">{t.exportDestination}</span>

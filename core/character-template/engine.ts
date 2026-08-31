@@ -256,3 +256,59 @@ export async function createDesignMasterCharacter(input: { name: string; designM
   const previewFrames = await Promise.all(poses.map(async (pose) => ({ poseId: pose.id, state: pose.state, buffer: await renderCharacterPose(assetBase, pose), width: 64, height: 128 })));
   return { asset: { ...assetBase, previewFrames }, palette: await extractSemanticPalette(input.designMaster, input.prompt) };
 }
+
+/** Extract a fixed-order AI pose sheet into deduplicated template-compatible part frames. */
+export async function createPoseSheetCharacter(input: { name: string; poseSheet: Buffer; prompt?: string; id?: string }): Promise<TemplateCharacterResult> {
+  const normalizedSheet = await sharp(input.poseSheet, { limitInputPixels: 64_000_000 })
+    .resize(768, 576, { fit: "fill", kernel: sharp.kernel.nearest })
+    .png()
+    .toBuffer();
+  const framesByPart = { head: [] as CharacterFrame[], body: [] as CharacterFrame[], leg: [] as CharacterFrame[] };
+  const poseFrameIds: Record<string, { head: string; body: string; leg: string }> = {};
+  const ranges = { head: [0, 0.34], body: [0.25, 0.72], leg: [0.6, 1] } as const;
+  for (const [index, pose] of nroHumanoidTemplate.poses.entries()) {
+    const cell = await sharp(normalizedSheet).extract({ left: (index % 4) * 192, top: Math.floor(index / 4) * 192, width: 192, height: 192 }).png().toBuffer();
+    const bounds = await alphaBounds(cell);
+    if (!bounds) throw new Error(`Pose sheet thiếu ô ${pose.id}.`);
+    const characterHeight = bounds.bottom - bounds.top + 1;
+    const characterWidth = bounds.right - bounds.left + 1;
+    if (characterHeight < 32 || characterWidth / characterHeight > 0.98) throw new Error(`Pose ${pose.id} không có silhouette humanoid rõ ràng.`);
+    const cellSource = sharp(cell);
+    poseFrameIds[pose.id] = { head: "", body: "", leg: "" };
+    for (const part of ["head", "body", "leg"] as const) {
+      const [start, end] = ranges[part];
+      const top = bounds.top + Math.floor(characterHeight * start);
+      const cropHeight = Math.max(1, Math.min(bounds.height - top, Math.ceil(characterHeight * (end - start))));
+      const buffer = await cellSource.clone()
+        .extract({ left: bounds.left, top, width: characterWidth, height: cropHeight })
+        .resize(64, 64, { fit: "contain", kernel: sharp.kernel.nearest, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png({ palette: true, colours: 128 })
+        .toBuffer();
+      const digest = createHash("sha1").update(buffer).digest("hex");
+      const duplicate = framesByPart[part].find((frame) => frame.buffer && createHash("sha1").update(frame.buffer).digest("hex") === digest);
+      const frameId = duplicate?.id || `${part}-${pose.id}`;
+      poseFrameIds[pose.id][part] = frameId;
+      if (!duplicate) framesByPart[part].push({ id: frameId, imagePath: `sprites/${part}/${frameId}.png`, dx: 0, dy: 0, width: 64, height: 64, buffer });
+    }
+  }
+  const poses: CharacterPoseMapping[] = nroHumanoidTemplate.poses.map((pose) => ({
+    ...pose,
+    headFrame: poseFrameIds[pose.id].head,
+    bodyFrame: poseFrameIds[pose.id].body,
+    legFrame: poseFrameIds[pose.id].leg,
+  }));
+  const id = input.id || createHash("sha1").update(input.name).update(input.poseSheet).digest("hex").slice(0, 16);
+  const assetBase: CharacterAsset = {
+    id,
+    name: input.name,
+    templateId: nroHumanoidTemplate.id,
+    generationMode: "ai",
+    parts: { head: { frames: framesByPart.head }, body: { frames: framesByPart.body }, leg: { frames: framesByPart.leg } },
+    poses,
+    previewFrames: [],
+    status: "game-ready",
+    pipeline: { designMaster: "ai", poseSource: "ai" },
+  };
+  const previewFrames = await Promise.all(poses.map(async (pose) => ({ poseId: pose.id, state: pose.state, buffer: await renderCharacterPose(assetBase, pose), width: 64, height: 128 })));
+  return { asset: { ...assetBase, previewFrames }, palette: await extractSemanticPalette(input.poseSheet, input.prompt) };
+}

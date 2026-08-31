@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     let output;
     let characterAsset;
     let creationMode;
+    let intermediate;
     const aiAccess = characterPipeline ? await hasCharacterAiAccess(settings) : false;
     const requestHash = characterPipeline
       ? createCharacterRequestHash({ prompt, referenceImage, settings, generationRecipe, aiAccess })
@@ -80,6 +81,7 @@ export async function POST(request: Request) {
       normalized = creation.normalized;
       characterAsset = creation.asset;
       creationMode = creation.mode;
+      intermediate = creation.poseSheet ? { poseSheet: creation.poseSheet } : undefined;
       output = await adapter.transformCharacterAsset!(characterAsset, context);
     } else {
       if (settings.provider === "manual" && !referenceImage) return NextResponse.json({ message: "Hãy thêm ảnh nguồn để xử lý Không AI." }, { status: 400 });
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
     }
     const validation = await adapter.validate(output);
     if (!validation.ready) return NextResponse.json({ message: "Ảnh này chưa thể chuyển đổi an toàn cho game profile đã chọn. Hãy thử ảnh khác." }, { status: 422 });
-    const generation = await saveGeneration({ name: prompt || `${kind}-asset`, kind, source: visual, normalized, output, validation, characterAsset, creationMode, requestHash });
+    const generation = await saveGeneration({ name: prompt || `${kind}-asset`, kind, source: visual, normalized, output, validation, characterAsset, creationMode, requestHash, intermediate });
     return NextResponse.json({
       generationId: generation.id,
       image: { base64: output.preview.buffer.toString("base64"), mimeType: output.preview.mimeType, width: output.preview.width, height: output.preview.height },

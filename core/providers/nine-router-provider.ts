@@ -13,7 +13,7 @@ export class NineRouterImageProvider implements AssetGenerationProvider {
     const prompt = [
       input.prompt?.trim() || "Adapt the supplied image into a clean game asset.",
       input.generationRecipe,
-      "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background when supported.",
+      input.generationRecipe?.includes("pose sheet") ? "Preserve the complete pose sheet grid with no text or extra characters and a transparent background when supported." : "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background when supported.",
     ].filter(Boolean).join("\n\n");
     const result = await generateNineRouterImage({
       baseUrl: this.baseUrl,

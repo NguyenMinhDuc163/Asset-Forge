@@ -30,6 +30,7 @@ export interface GenerationRecord {
   visual: { width: number; height: number; format: "png"; file: string };
   preview: { width: number; height: number; mimeType: "image/png"; file: string };
   previewFrames?: Array<{ poseId: string; state: string; width: number; height: number; mimeType: "image/png"; file: string }>;
+  intermediate?: { poseSheet?: { width: number; height: number; mimeType: string; file: string } };
   adapter: { id: string; metadata: Record<string, unknown> };
   validation: ValidationResult;
   files: Array<{ path: string; mimeType: string }>;
@@ -49,6 +50,7 @@ export async function saveGeneration(input: {
   characterAsset?: CharacterAsset;
   creationMode?: CharacterGenerationMode;
   requestHash?: string;
+  intermediate?: { poseSheet?: GeneratedVisual };
 }): Promise<GenerationRecord> {
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const root = safeJoin(cacheRoot(), id);
@@ -73,6 +75,11 @@ export async function saveGeneration(input: {
       await mkdir(dirname(safeJoin(root, recordFrame.file)), { recursive: true });
       await writeFile(safeJoin(root, recordFrame.file), frame.buffer);
     }
+  }
+  const poseSheet = input.intermediate?.poseSheet;
+  if (poseSheet) {
+    await mkdir(dirname(safeJoin(root, "intermediate/pose-sheet.png")), { recursive: true });
+    await writeFile(safeJoin(root, "intermediate/pose-sheet.png"), poseSheet.buffer);
   }
   for (const file of input.output.files) {
     const destination = safeJoin(root, file.path);
@@ -103,6 +110,7 @@ export async function saveGeneration(input: {
     visual: { width: input.normalized.width, height: input.normalized.height, format: "png", file: "processed.png" },
     preview: { width: input.output.preview.width, height: input.output.preview.height, mimeType: "image/png", file: "preview.png" },
     ...(previewFrames?.length ? { previewFrames } : {}),
+    ...(poseSheet ? { intermediate: { poseSheet: { width: 1024, height: 1024, mimeType: poseSheet.mimeType, file: "intermediate/pose-sheet.png" } } } : {}),
     adapter: { id: input.output.adapterId, metadata: input.output.metadata },
     validation: input.validation,
     files: input.output.files.map(({ path, mimeType }) => ({ path, mimeType })),

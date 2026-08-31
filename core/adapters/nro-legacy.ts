@@ -127,7 +127,7 @@ export class NroLegacyAdapter implements AssetAdapter {
       files,
       preview: { buffer: asset.previewFrames[0].buffer, width: 64, height: 128, mimeType: "image/png" },
       previewFrames: asset.previewFrames,
-      metadata: { characterAsset: true, templateId: asset.templateId, status: asset.status, poseMappings, frameCount: frames.length, smallImages: atlasEntries },
+      metadata: { characterAsset: true, templateId: asset.templateId, status: asset.status, pipeline: asset.pipeline, poseMappings, frameCount: frames.length, smallImages: atlasEntries },
     };
   }
 

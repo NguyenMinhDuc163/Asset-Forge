@@ -128,5 +128,6 @@
   "stagePreparing": "Chuẩn bị thiết kế",
   "stageDesign": "Đồng bộ phong cách game",
   "stageFrames": "Tạo frame chuyển động",
-  "stageValidation": "Kiểm tra output"
+  "stageValidation": "Kiểm tra output",
+  "exportNeedsReady": "Cần Game Ready trước khi export"
 }

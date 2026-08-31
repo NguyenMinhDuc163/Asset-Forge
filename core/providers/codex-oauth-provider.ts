@@ -9,7 +9,7 @@ export class CodexOAuthImageProvider implements AssetGenerationProvider {
 
   async generate(input: ProviderGenerateInput): Promise<GeneratedVisual> {
     const model = input.model || "gpt-5.5-image";
-    const prompt = [input.prompt?.trim() || "Adapt the supplied image into a clean game asset.", input.generationRecipe, "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background."].filter(Boolean).join("\n\n");
+    const prompt = [input.prompt?.trim() || "Adapt the supplied image into a clean game asset.", input.generationRecipe, input.generationRecipe?.includes("pose sheet") ? "Preserve the complete pose sheet grid with no text or extra characters and a transparent background." : "Create one isolated game asset with a clear silhouette, centered composition, no text, and transparent background."].filter(Boolean).join("\n\n");
     const result = await generateCodexOAuthImage({ model, prompt, referenceImage: input.referenceImage, referenceMimeType: input.referenceMimeType });
     return { ...result, provider: this.id, model };
   }
