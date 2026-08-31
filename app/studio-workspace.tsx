@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { SettingsPanel } from "./settings-panel";
+import type { ProviderId } from "@/lib/storage/settings";
 
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
 type AssetKind = (typeof assetKinds)[number];
@@ -14,8 +16,10 @@ export function StudioWorkspace() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [studioState, setStudioState] = useState<StudioState>("empty");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [provider, setProvider] = useState<ProviderId>("openai");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleSettingsSaved = useCallback((settings: { provider: ProviderId }) => setProvider(settings.provider), []);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -125,7 +129,7 @@ export function StudioWorkspace() {
 
             <div className="mt-auto pt-7">
               <div className="mb-3 flex items-center justify-between text-xs text-[var(--muted)]">
-                <span>OpenAI with automatic model selection</span>
+                <span>{provider === "openai" ? "OpenAI with automatic model selection" : "No-AI image processing"}</span>
                 <button type="button" className="font-medium text-[var(--ink)] underline decoration-[var(--line-strong)] underline-offset-4" onClick={() => setSettingsOpen(true)}>Change</button>
               </div>
               <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference) || studioState === "creating"} className="primary-button w-full">
@@ -174,22 +178,7 @@ export function StudioWorkspace() {
         </section>
       </div>
 
-      {settingsOpen && (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-[rgba(37,32,26,0.28)] p-0 sm:items-center sm:p-6" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
-          <section className="w-full max-w-lg rounded-t-[18px] border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_30px_90px_rgba(37,32,26,0.2)] sm:rounded-[18px]" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="mb-7 flex items-start justify-between">
-              <div><h2 id="settings-title" className="text-xl font-semibold tracking-[-0.03em]">Settings</h2><p className="mt-1 text-sm text-[var(--muted)]">Configure how ContentForge creates assets.</p></div>
-              <button type="button" className="control-button size-10 px-0" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
-            </div>
-            <div className="space-y-5">
-              <label className="block text-sm font-semibold">Provider<select className="field mt-2"><option>OpenAI</option><option>No-AI image processing</option></select></label>
-              <label className="block text-sm font-semibold">API key<input type="password" className="field mt-2" placeholder="sk-..." autoComplete="off" /></label>
-              <label className="block text-sm font-semibold">Image model<select className="field mt-2"><option>Auto - Recommended</option></select></label>
-            </div>
-            <div className="mt-7 flex justify-end gap-2"><button type="button" className="control-button" onClick={() => setSettingsOpen(false)}>Cancel</button><button type="button" className="primary-button" onClick={() => setSettingsOpen(false)}>Save settings</button></div>
-          </section>
-        </div>
-      )}
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={handleSettingsSaved} />
     </main>
   );
 }
