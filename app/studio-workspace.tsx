@@ -18,6 +18,7 @@ export function StudioWorkspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderId>("openai");
   const [errorMessage, setErrorMessage] = useState("");
+  const [resultMeta, setResultMeta] = useState({ adapter: "NRO Legacy", width: 64, height: 128, checks: [] as string[] });
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleSettingsSaved = useCallback((settings: { provider: ProviderId }) => setProvider(settings.provider), []);
@@ -55,9 +56,10 @@ export function StudioWorkspace() {
     if (reference) form.set("reference", reference);
     try {
       const response = await fetch("/api/assets/create", { method: "POST", body: form });
-      const result = await response.json() as { image?: { base64: string; mimeType: string }; message?: string };
+      const result = await response.json() as { image?: { base64: string; mimeType: string; width: number; height: number }; adapter?: { label: string }; validation?: { checks: Array<{ label: string; passed: boolean }> }; message?: string };
       if (!response.ok || !result.image) throw new Error(result.message || "The asset could not be created.");
       setPreviewUrl(`data:${result.image.mimeType};base64,${result.image.base64}`);
+      setResultMeta({ adapter: result.adapter?.label || "Game adapter", width: result.image.width, height: result.image.height, checks: result.validation?.checks.filter((check) => check.passed).map((check) => check.label) || [] });
       setStudioState("ready");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "The asset could not be created.");
@@ -156,8 +158,8 @@ export function StudioWorkspace() {
 
           <div className="relative flex min-h-[500px] flex-col bg-[var(--preview)] p-4 sm:p-6 lg:p-8">
             <div className="mb-4 flex items-center justify-between">
-              <div><p className="text-sm font-semibold">Game preview</p><p className="mt-0.5 text-xs text-[var(--muted)]">NRO Legacy character profile</p></div>
-              <span className="rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">64 × 64</span>
+              <div><p className="text-sm font-semibold">Game preview</p><p className="mt-0.5 text-xs text-[var(--muted)]">{resultMeta.adapter} profile</p></div>
+              <span className="rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">{resultMeta.width} × {resultMeta.height}</span>
             </div>
 
             <div className="preview-grid relative flex flex-1 items-center justify-center overflow-hidden rounded-[14px] border border-[var(--line-strong)]">
@@ -184,7 +186,7 @@ export function StudioWorkspace() {
               {studioState === "error" && <div className="rounded-[10px] bg-[#f8e7e1] px-3 py-2 text-sm text-[#87391b]" role="alert">{errorMessage}</div>}
               {studioState === "ready" ? (
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className="text-sm font-semibold text-[var(--success)]">Ready for game</p><p className="mt-1 text-xs text-[var(--muted)]">Format valid, size normalized, metadata prepared</p></div>
+                  <div><p className="text-sm font-semibold text-[var(--success)]">Ready for game</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
                   <div className="flex gap-2"><button type="button" className="control-button" onClick={() => setStudioState("empty")}>Try another</button><button type="button" className="primary-button px-6">Export</button></div>
                 </div>
               ) : (

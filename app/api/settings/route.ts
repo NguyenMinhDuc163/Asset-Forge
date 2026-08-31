@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { autoModel, discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { getSettings, hasOpenAIKey, saveOpenAIKey, saveSettings, type ProviderId } from "@/lib/storage/settings";
+import { ensureProjectProfile } from "@/lib/storage/projects";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,7 @@ export async function PUT(request: Request) {
       ...(typeof body.projectRoot === "string" ? { projectRoot: body.projectRoot.trim() } : {}),
       ...(body.adapterId ? { adapterId: body.adapterId } : {}),
     });
+    if (settings.projectRoot) await ensureProjectProfile(settings.projectRoot, settings.adapterId);
     return NextResponse.json({ ...settings, apiKeyConfigured: await hasOpenAIKey(), ...(compatibleModels ? { models: [autoModel, ...compatibleModels] } : {}) });
   } catch (error) {
     console.error("Could not save ContentForge settings", error);

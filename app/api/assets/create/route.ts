@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assetKinds, type AssetKind } from "@/core/assets/types";
-import { processGeneratedVisual } from "@/core/assets/pipeline";
+import { getAdapter } from "@/core/adapters";
+import { normalizeImage } from "@/core/image/normalize";
 import { ManualImageProvider } from "@/core/providers/manual-provider";
 import { OpenAIImageProvider } from "@/core/providers/openai-provider";
 import type { GeneratedVisual } from "@/core/providers/types";
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
     }
 
     const settings = await getSettings();
+    const adapter = getAdapter(settings.adapterId);
+    if (!adapter.supportedKinds.includes(kind)) return NextResponse.json({ message: "Adapter hiện tại không hỗ trợ loại tài nguyên này." }, { status: 400 });
+    const context = { kind, provider: settings.provider } as const;
+    const generationRecipe = adapter.getGenerationRecipe(context);
     let visual: GeneratedVisual;
     if (settings.provider === "manual") {
       visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
@@ -39,13 +44,17 @@ export async function POST(request: Request) {
       if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
       const availableModels = await discoverImageModels(apiKey);
       const model = resolveImageModel(settings.imageModel, availableModels);
-      visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model });
+      visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
     }
-    const normalized = await processGeneratedVisual(kind, visual);
+    const normalized = await normalizeImage(visual.buffer, adapter.getNormalizeOptions(context));
+    const output = await adapter.transform(normalized, context);
+    const validation = await adapter.validate(output);
+    if (!validation.ready) return NextResponse.json({ message: "Ảnh này chưa thể chuyển đổi an toàn cho game profile đã chọn. Hãy thử ảnh khác." }, { status: 422 });
     return NextResponse.json({
-      image: { base64: normalized.buffer.toString("base64"), mimeType: "image/png", width: normalized.width, height: normalized.height },
+      image: { base64: output.preview.buffer.toString("base64"), mimeType: output.preview.mimeType, width: output.preview.width, height: output.preview.height },
       source: { provider: visual.provider, model: visual.model },
-      validation: { ready: true, checks: ["format", "dimensions", "alpha"] },
+      adapter: { id: output.adapterId, label: adapter.label },
+      validation,
     });
   } catch (error) {
     const friendlyError = toOpenAIProviderError(error);
