@@ -7,7 +7,7 @@ import type { ProviderId } from "@/lib/storage/settings";
 
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
 type AssetKind = (typeof assetKinds)[number];
-type StudioState = "empty" | "creating" | "ready";
+type StudioState = "empty" | "creating" | "ready" | "error";
 
 export function StudioWorkspace() {
   const [assetKind, setAssetKind] = useState<AssetKind>("Character");
@@ -17,6 +17,7 @@ export function StudioWorkspace() {
   const [studioState, setStudioState] = useState<StudioState>("empty");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderId>("openai");
+  const [errorMessage, setErrorMessage] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleSettingsSaved = useCallback((settings: { provider: ProviderId }) => setProvider(settings.provider), []);
@@ -44,10 +45,24 @@ export function StudioWorkspace() {
     acceptFile(event.dataTransfer.files?.[0]);
   }
 
-  function createAsset() {
+  async function createAsset() {
     if (!prompt.trim() && !reference) return;
     setStudioState("creating");
-    window.setTimeout(() => setStudioState("ready"), 900);
+    setErrorMessage("");
+    const form = new FormData();
+    form.set("kind", assetKind.toLowerCase());
+    form.set("prompt", prompt);
+    if (reference) form.set("reference", reference);
+    try {
+      const response = await fetch("/api/assets/create", { method: "POST", body: form });
+      const result = await response.json() as { image?: { base64: string; mimeType: string }; message?: string };
+      if (!response.ok || !result.image) throw new Error(result.message || "The asset could not be created.");
+      setPreviewUrl(`data:${result.image.mimeType};base64,${result.image.base64}`);
+      setStudioState("ready");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "The asset could not be created.");
+      setStudioState("error");
+    }
   }
 
   return (
@@ -132,7 +147,8 @@ export function StudioWorkspace() {
                 <span>{provider === "openai" ? "OpenAI with automatic model selection" : "No-AI image processing"}</span>
                 <button type="button" className="font-medium text-[var(--ink)] underline decoration-[var(--line-strong)] underline-offset-4" onClick={() => setSettingsOpen(true)}>Change</button>
               </div>
-              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference) || studioState === "creating"} className="primary-button w-full">
+              {provider === "manual" && !reference && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">Add a source image to use No-AI mode.</p>}
+              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference) || (provider === "manual" && !reference) || studioState === "creating"} className="primary-button w-full">
                 {studioState === "creating" ? "Forging asset..." : "Create asset"}
               </button>
             </div>
@@ -165,6 +181,7 @@ export function StudioWorkspace() {
             </div>
 
             <div className="mt-4 min-h-16">
+              {studioState === "error" && <div className="rounded-[10px] bg-[#f8e7e1] px-3 py-2 text-sm text-[#87391b]" role="alert">{errorMessage}</div>}
               {studioState === "ready" ? (
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div><p className="text-sm font-semibold text-[var(--success)]">Ready for game</p><p className="mt-1 text-xs text-[var(--muted)]">Format valid, size normalized, metadata prepared</p></div>

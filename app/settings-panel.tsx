@@ -9,7 +9,10 @@ interface SettingsData {
   projectRoot: string;
   adapterId: string;
   apiKeyConfigured: boolean;
+  models?: FriendlyModel[];
 }
+
+interface FriendlyModel { id: string; label: string; description: string; recommended?: boolean }
 
 interface SettingsPanelProps {
   open: boolean;
@@ -30,6 +33,7 @@ export function SettingsPanel({ open, onClose, onSaved }: SettingsPanelProps) {
   const [apiKey, setApiKey] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [models, setModels] = useState<FriendlyModel[]>([{ id: "auto", label: "Tự động", description: "Đề xuất", recommended: true }]);
 
   useEffect(() => {
     if (!open) return;
@@ -44,6 +48,12 @@ export function SettingsPanel({ open, onClose, onSaved }: SettingsPanelProps) {
         setSettings(data);
         onSaved(data);
         setStatus("idle");
+        if (data.apiKeyConfigured) {
+          fetch("/api/providers/openai/models")
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error("Không thể tải danh sách mô hình.")))
+            .then((catalog: { models: FriendlyModel[] }) => { if (active) setModels(catalog.models); })
+            .catch(() => undefined);
+        }
       })
       .catch((error: Error) => {
         if (!active) return;
@@ -66,6 +76,7 @@ export function SettingsPanel({ open, onClose, onSaved }: SettingsPanelProps) {
       const data = await response.json() as SettingsData & { message?: string };
       if (!response.ok) throw new Error(data.message || "Settings could not be saved.");
       setSettings(data);
+      if (data.models) setModels(data.models);
       setApiKey("");
       setStatus("saved");
       setMessage("Settings saved locally.");
@@ -102,7 +113,7 @@ export function SettingsPanel({ open, onClose, onSaved }: SettingsPanelProps) {
               <p className="-mt-3 text-xs leading-5 text-[var(--muted)]">The saved key is never sent back to this screen.</p>
               <label className="block text-sm font-semibold">Image model
                 <select className="field mt-2" value={settings.imageModel} onChange={(event) => setSettings({ ...settings, imageModel: event.target.value })}>
-                  <option value="auto">Auto - Recommended</option>
+                  {models.map((model) => <option key={model.id} value={model.id}>{model.label}{model.recommended ? " - Đề xuất" : ""}</option>)}
                 </select>
               </label>
             </>
