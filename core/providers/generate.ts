@@ -24,13 +24,16 @@ const handlers: Record<ProviderId, ProviderHandler> = {
     }
     const apiKey = await getOpenAIKey();
     if (!apiKey) throw new Error("Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh.");
-    const model = resolveImageModel(context.settings.imageModel, await discoverImageModels(apiKey));
+    const model = context.settings.imageModel === "auto"
+      ? resolveImageModel(context.settings.imageModel, await discoverImageModels(apiKey))
+      : resolveImageModel(context.settings.imageModel, []);
     return new OpenAIImageProvider(apiKey).generate({ ...context, model });
   },
   "nine-router": async (context) => {
     const apiKey = await getNineRouterKey();
-    const models = await discoverNineRouterImageModels(context.settings.nineRouterUrl, apiKey);
-    const model = context.settings.imageModel === "auto" ? models[0]?.id : context.settings.imageModel;
+    const model = context.settings.imageModel === "auto"
+      ? (await discoverNineRouterImageModels(context.settings.nineRouterUrl, apiKey))[0]?.id
+      : context.settings.imageModel.trim();
     if (!model) throw new Error("Hãy nhập model ảnh 9Router.");
     return new NineRouterImageProvider(context.settings.nineRouterUrl, apiKey).generate({ ...context, model });
   },
