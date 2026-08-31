@@ -40,6 +40,9 @@
   "backgroundCleaned": "Background cleaned",
   "sourcePreview": "Source character image",
   "processedPreview": "Character after background cleanup",
+  "neckLine": "Neck line",
+  "hipLine": "Hip / lower-belt line",
+  "applySplit": "Apply split lines",
   "profile": "profile",
   "preparing": "Preparing visual material",
   "preservingReference": "Preserving the character identity",
@@ -149,5 +152,5 @@
   "stageParts": "Splitting HEAD / BODY / LEG directly",
   "stageSimilarity": "Comparing the preview with the source",
   "exportNeedsReady": "Static Ready or Game Ready is required before export",
-  "aiCostHint": "Animated characters may use multiple AI generations."
+  "aiCostHint": "AI creates only the design master; HEAD, BODY, and LEG use the static split pipeline."
 }

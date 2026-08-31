@@ -1,7 +1,7 @@
 import type { AppSettings } from "@/lib/storage/settings";
 import { getNineRouterKey, getOpenAIKey, hasCodexOAuth } from "@/lib/storage/settings";
 import { normalizeImage } from "@/core/image/normalize";
-import { createDesignMasterCharacter, createPoseSheetCharacter, createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
+import { createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
 import { createReferenceStaticCharacter, processReferenceCharacter } from "./reference-first";
 import { generateVisual } from "@/core/providers/generate";
 import type { GeneratedVisual } from "@/core/providers/types";
@@ -16,6 +16,7 @@ export interface CharacterCreationInput {
   referenceMimeType?: string;
   settings: AppSettings;
   generationRecipe: string;
+  splitLines?: { neck: number; hip: number };
 }
 
 export interface CharacterCreationResult {
@@ -26,9 +27,9 @@ export interface CharacterCreationResult {
   poseSheet?: GeneratedVisual;
 }
 
-export function createCharacterRequestHash(input: Pick<CharacterCreationInput, "prompt" | "referenceImage" | "settings" | "generationRecipe"> & { aiAccess?: boolean }) {
+export function createCharacterRequestHash(input: Pick<CharacterCreationInput, "prompt" | "referenceImage" | "settings" | "generationRecipe" | "splitLines"> & { aiAccess?: boolean }) {
   const hash = createHash("sha256");
-  hash.update("character-pipeline-v2.1-design-master-pose-sheet\0");
+  hash.update("character-pipeline-v2.2-joint-split-static\0");
   hash.update(input.settings.provider);
   hash.update("\0");
   hash.update(input.settings.imageModel);
@@ -41,6 +42,7 @@ export function createCharacterRequestHash(input: Pick<CharacterCreationInput, "
   hash.update("\0");
   hash.update(input.prompt.trim().toLowerCase());
   hash.update("\0");
+  if (input.splitLines) hash.update(`${input.splitLines.neck.toFixed(4)}|${input.splitLines.hip.toFixed(4)}\0`);
   if (input.referenceImage?.length) hash.update(input.referenceImage);
   return hash.digest("hex");
 }
@@ -55,6 +57,9 @@ export async function hasCharacterAiAccess(settings: AppSettings) {
 
 export async function createCharacter(input: CharacterCreationInput): Promise<CharacterCreationResult> {
   const mode = resolveCreationMode({ settings: input.settings, hasAiAccess: await hasCharacterAiAccess(input.settings), hasReference: Boolean(input.referenceImage?.length), hasPrompt: Boolean(input.prompt.trim()) });
+  if (input.settings.provider === "manual" && !input.referenceImage?.length) {
+    throw new Error("Hãy thêm ảnh nguồn để xử lý nhân vật Không AI.");
+  }
   if (mode === "reference-static") {
     if (!input.referenceImage?.length) throw new Error("Hãy thêm ảnh nguồn để xử lý nhân vật Không AI.");
     const processed = await processReferenceCharacter(input.referenceImage);
@@ -66,6 +71,7 @@ export async function createCharacter(input: CharacterCreationInput): Promise<Ch
       processed: processed.normalized.buffer,
       backgroundRemoved: processed.backgroundRemoved,
       sourceComplete: processed.sourceComplete,
+      splitLines: input.splitLines,
     });
     return {
       mode: "reference-static",
@@ -102,29 +108,18 @@ export async function createCharacter(input: CharacterCreationInput): Promise<Ch
     referenceMimeType: input.referenceMimeType,
     generationRecipe: input.generationRecipe,
   });
-  const normalized = await normalizeImage(visual.buffer, { width: 192, height: 192, pixelArt: true, paletteColours: 128, removeSolidBackground: true });
-  if (!await isHumanoidCompatible(normalized.buffer)) {
-    throw new Error("Ảnh nguồn AI không tạo ra silhouette humanoid phù hợp với template game.");
+  const processed = await processReferenceCharacter(visual.buffer);
+  if (!await isHumanoidCompatible(processed.normalized.buffer)) {
+    throw new Error("Ảnh nguồn AI không tạo ra silhouette humanoid đầy đủ đầu, thân và chân.");
   }
-  let poseSheet: GeneratedVisual | undefined;
-  try {
-    poseSheet = await generateVisual(input.settings.provider, {
-      settings: input.settings,
-      kind: "character",
-      prompt: input.prompt,
-      referenceImage: normalized.buffer,
-      referenceMimeType: "image/png",
-      generationRecipe: [
-        "Create a 4 by 3 transparent pose sheet of the exact same character from the reference design master.",
-        "Use this exact cell order left-to-right, top-to-bottom: idle-0, idle-1, run-0, run-1, run-2, jump, fall, hurt, attack-0, attack-1, attack-2, fly.",
-        "Keep the same hairstyle, face, clothing, colors, proportions and readable pixel-art silhouette in every cell. No labels, borders, scenery or extra characters.",
-      ].join(" "),
-    });
-    const generated = await createPoseSheetCharacter({ name: input.name, poseSheet: poseSheet.buffer, prompt: input.prompt });
-    return { mode, visual, normalized, asset: generated.asset, poseSheet };
-  } catch (error) {
-    console.warn("AI pose sheet was not usable; using deterministic template transfer", error instanceof Error ? error.message : error);
-    const template = await createDesignMasterCharacter({ name: input.name, designMaster: normalized.buffer, prompt: input.prompt });
-    return { mode, visual, normalized, asset: template.asset };
-  }
+  const generated = await createReferenceStaticCharacter({
+    name: input.name,
+    processed: processed.normalized.buffer,
+    backgroundRemoved: processed.backgroundRemoved,
+    sourceComplete: processed.sourceComplete,
+    generationMode: "ai",
+    designMaster: "ai",
+    splitLines: input.splitLines,
+  });
+  return { mode, visual, normalized: processed.normalized, asset: generated.asset };
 }

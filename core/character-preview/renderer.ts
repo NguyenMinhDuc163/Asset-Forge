@@ -20,7 +20,7 @@ export async function renderCharacterPose(asset: CharacterAsset, pose: Character
       layer(pose.bodyFrame, pose.bodyOffset.x, 32 + pose.bodyOffset.y),
       layer(pose.headFrame, pose.headOffset.x, pose.headOffset.y),
     ]);
-  return asset.generationMode === "reference-static"
+  return asset.pipeline?.poseSource === "static"
     ? rendered.png({ compressionLevel: 9 }).toBuffer()
     : rendered.png({ palette: true, colours: 128 }).toBuffer();
 }

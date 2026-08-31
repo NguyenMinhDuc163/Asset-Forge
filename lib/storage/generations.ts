@@ -98,7 +98,7 @@ export async function saveGeneration(input: {
     ...(input.characterAsset ? {
       template: input.characterAsset.templateId,
       generation: { mode: input.characterAsset.generationMode === "ai" ? "ai" : input.characterAsset.generationMode === "reference-static" ? "reference" : "template", detail: input.characterAsset.generationMode },
-      ...(input.characterAsset.generationMode !== "reference-static" ? { animations: [...new Set(input.characterAsset.poses.map((pose) => pose.state))] } : {}),
+      ...(input.characterAsset.pipeline?.poseSource !== "static" ? { animations: [...new Set(input.characterAsset.poses.map((pose) => pose.state))] } : {}),
       character: {
         templateId: input.characterAsset.templateId,
         generationMode: input.characterAsset.generationMode,

@@ -18,8 +18,12 @@ export interface ReferenceStaticAnalysis {
   backgroundRemoved: boolean;
   sourceComplete: boolean;
   partsReady: boolean;
+  headJointReady: boolean;
+  bodyJointReady: boolean;
+  legJointReady: boolean;
   similarity: number;
   splitRows: { headEnd: number; bodyEnd: number };
+  splitLines: { neck: number; hip: number };
 }
 
 export interface ProcessedReference {
@@ -184,13 +188,16 @@ export async function processReferenceCharacter(input: Buffer): Promise<Processe
   };
 }
 
-function findSplitRow(widths: number[], start: number, end: number, target: number) {
+function findSplitRow(widths: number[], transitions: number[], start: number, end: number, target: number) {
   const maxWidth = Math.max(1, ...widths);
   let best = target;
   let bestScore = Number.POSITIVE_INFINITY;
   for (let row = start; row <= end; row += 1) {
     const emptyPenalty = widths[row] === 0 ? 0.45 : 0;
-    const score = widths[row] / maxWidth + Math.abs(row - target) / Math.max(1, end - start) * 0.28 + emptyPenalty;
+    const shapeScore = widths[row] / maxWidth * 0.52;
+    const targetScore = Math.abs(row - target) / Math.max(1, end - start) * 0.3;
+    const colourBoundary = transitions[row] / 255;
+    const score = shapeScore + targetScore - colourBoundary * 0.46 + emptyPenalty;
     if (score < bestScore) {
       best = row;
       bestScore = score;
@@ -233,6 +240,9 @@ export async function createReferenceStaticCharacter(input: {
   processed: Buffer;
   backgroundRemoved: boolean;
   sourceComplete: boolean;
+  generationMode?: "ai" | "reference-static";
+  designMaster?: "ai" | "reference";
+  splitLines?: { neck: number; hip: number };
 }): Promise<{ asset: CharacterAsset; analysis: ReferenceStaticAnalysis; gameImage: Buffer }> {
   const fitted = await sharp(input.processed, { limitInputPixels: 64_000_000 })
     .resize(60, 124, { fit: "contain", kernel: sharp.kernel.lanczos3, background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -248,10 +258,45 @@ export async function createReferenceStaticCharacter(input: {
     for (let x = 0; x < gameCanvas.width; x += 1) if (data[(y * gameCanvas.width + x) * info.channels + 3] > 12) visible += 1;
     return visible;
   });
-  const headTarget = bounds.top + Math.round(characterHeight * 0.34);
-  const bodyTarget = bounds.top + Math.round(characterHeight * 0.68);
-  const headEnd = Math.max(24, Math.min(58, findSplitRow(widths, bounds.top + Math.round(characterHeight * 0.25), bounds.top + Math.round(characterHeight * 0.43), headTarget)));
-  const bodyEnd = Math.max(66, Math.min(104, findSplitRow(widths, bounds.top + Math.round(characterHeight * 0.56), bounds.top + Math.round(characterHeight * 0.76), bodyTarget)));
+  const rowColours = Array.from({ length: gameCanvas.height }, (_, y) => {
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let count = 0;
+    for (let x = 0; x < gameCanvas.width; x += 1) {
+      const offset = (y * gameCanvas.width + x) * info.channels;
+      if (data[offset + 3] <= 12) continue;
+      red += data[offset];
+      green += data[offset + 1];
+      blue += data[offset + 2];
+      count += 1;
+    }
+    return count ? [red / count, green / count, blue / count] : undefined;
+  });
+  const transitions = rowColours.map((colour, row) => {
+    const before = rowColours[Math.max(0, row - 2)];
+    const after = rowColours[Math.min(gameCanvas.height - 1, row + 2)];
+    if (!colour || !before || !after) return 0;
+    return Math.max(Math.abs(before[0] - after[0]), Math.abs(before[1] - after[1]), Math.abs(before[2] - after[2]));
+  });
+  const automaticNeck = findSplitRow(
+    widths,
+    transitions,
+    bounds.top + Math.round(characterHeight * 0.2),
+    bounds.top + Math.round(characterHeight * 0.34),
+    bounds.top + Math.round(characterHeight * 0.27),
+  );
+  const automaticHip = findSplitRow(
+    widths,
+    transitions,
+    bounds.top + Math.round(characterHeight * 0.48),
+    bounds.top + Math.round(characterHeight * 0.66),
+    bounds.top + Math.round(characterHeight * 0.56),
+  );
+  const requestedNeck = input.splitLines ? Math.round(input.splitLines.neck * gameCanvas.height) : automaticNeck;
+  const requestedHip = input.splitLines ? Math.round(input.splitLines.hip * gameCanvas.height) : automaticHip;
+  const headEnd = Math.max(20, Math.min(50, requestedNeck));
+  const bodyEnd = Math.max(Math.max(64, headEnd + 18), Math.min(96, requestedHip));
 
   const [head, body, leg] = await Promise.all([
     makePart(fitted, 0, headEnd),
@@ -260,6 +305,9 @@ export async function createReferenceStaticCharacter(input: {
   ]);
   const visibleCounts = await Promise.all([countVisible(head), countVisible(body), countVisible(leg)]);
   const partsReady = visibleCounts.every((count) => count >= 12);
+  const headJointReady = headEnd / gameCanvas.height <= 0.39;
+  const bodyJointReady = visibleCounts[1] >= 24 && bodyEnd - headEnd >= 18;
+  const legJointReady = bodyEnd / gameCanvas.height >= 0.5;
   const frames: Record<"head" | "body" | "leg", CharacterFrame> = {
     head: { id: "head-static", imagePath: "sprites/head.png", dx: 0, dy: 0, width: 64, height: 64, buffer: head },
     body: { id: "body-static", imagePath: "sprites/body.png", dx: 0, dy: 0, width: 64, height: 64, buffer: body },
@@ -280,22 +328,26 @@ export async function createReferenceStaticCharacter(input: {
     id,
     name: input.name,
     templateId: "reference-static-v1",
-    generationMode: "reference-static",
+    generationMode: input.generationMode || "reference-static",
     parts: { head: { frames: [frames.head] }, body: { frames: [frames.body] }, leg: { frames: [frames.leg] } },
     poses: [pose],
     previewFrames: [],
     status: "draft",
-    pipeline: { designMaster: "reference", poseSource: "static" },
+    pipeline: { designMaster: input.designMaster || "reference", poseSource: "static" },
   };
   const preview = await renderCharacterPose(assetBase, pose);
   const similarity = await imageSimilarity(fitted, preview);
-  const staticReady = input.backgroundRemoved && input.sourceComplete && partsReady && similarity >= 0.985;
+  const staticReady = input.backgroundRemoved && input.sourceComplete && partsReady && headJointReady && bodyJointReady && legJointReady && similarity >= 0.985;
   const analysis: ReferenceStaticAnalysis = {
     backgroundRemoved: input.backgroundRemoved,
     sourceComplete: input.sourceComplete,
     partsReady,
+    headJointReady,
+    bodyJointReady,
+    legJointReady,
     similarity,
     splitRows: { headEnd, bodyEnd },
+    splitLines: { neck: headEnd / gameCanvas.height, hip: bodyEnd / gameCanvas.height },
   };
   const asset: CharacterAsset = {
     ...assetBase,

@@ -55,7 +55,11 @@ export interface CharacterAsset {
     backgroundRemoved: boolean;
     sourceComplete: boolean;
     partsReady: boolean;
+    headJointReady: boolean;
+    bodyJointReady: boolean;
+    legJointReady: boolean;
     similarity: number;
     splitRows: { headEnd: number; bodyEnd: number };
+    splitLines: { neck: number; hip: number };
   };
 }

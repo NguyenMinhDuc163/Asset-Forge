@@ -19,9 +19,9 @@ export class NroLegacyAdapter implements AssetAdapter {
   getGenerationRecipe(context: AdapterContext) {
     if (context.kind !== "character") return `Create one isolated ${context.kind} sprite on a transparent background.`;
     return [
-      "Create one neutral design master for a single humanoid game character on a simple transparent or solid background.",
-      "Use a front-facing or slight three-quarter view with a large readable head, compact torso, short legs, crisp silhouette, and a consistent outfit palette.",
-      "Keep the complete character centered, without labels, grid lines, scenery, duplicate characters, or animation frames; this master will be adapted into the game's fixed pose template.",
+      "Create one complete, static, full-body design master for a single humanoid game character on a simple transparent or solid background.",
+      "Use a front-facing or slight three-quarter standing view. Keep the neck, shoulders, waist or belt, hips, hands, legs, and shoes clearly readable for joint-based part separation.",
+      "Keep the complete character centered without cropped hair, hands, or feet, and without labels, grid lines, scenery, duplicate characters, or animation frames.",
     ].join(" ");
   }
 
@@ -94,7 +94,7 @@ export class NroLegacyAdapter implements AssetAdapter {
   }
 
   async transformCharacterAsset(asset: CharacterAsset): Promise<AdapterOutput> {
-    if (asset.generationMode === "reference-static") return this.transformStaticReference(asset);
+    if (asset.pipeline?.poseSource === "static") return this.transformStaticReference(asset);
     const frames = [...asset.parts.head.frames, ...asset.parts.body.frames, ...asset.parts.leg.frames];
     const files: AdapterFile[] = [];
     for (const part of ["head", "body", "leg"] as const) {
@@ -254,17 +254,22 @@ export class NroLegacyAdapter implements AssetAdapter {
       const sourceComplete = analysis?.sourceComplete === true;
       const partsReady = partsPresent && partChecks.every((check) => check.visible && check.sized);
       const transparencyReady = partChecks.every((check) => check.transparent);
+      const headJointReady = analysis?.headJointReady === true;
+      const bodyJointReady = analysis?.bodyJointReady === true;
+      const legJointReady = analysis?.legJointReady === true;
       const previewReady = available.has("preview/character.png") && output.preview.width === 64 && output.preview.height === 128;
       const similarityReady = typeof analysis?.similarity === "number" && analysis.similarity >= 0.985;
       const manifestReady = available.has("manifest.json");
-      const ready = backgroundReady && sourceComplete && partsReady && transparencyReady && previewReady && similarityReady && manifestReady;
+      const ready = backgroundReady && sourceComplete && partsReady && transparencyReady && headJointReady && bodyJointReady && legJointReady && previewReady && similarityReady && manifestReady;
       return {
         ready,
         status: ready ? "static-ready" : "draft",
         checks: [
           { id: "source-complete", label: "Ảnh nguồn giữ đủ đầu, tay và chân", passed: sourceComplete },
           { id: "background", label: "Nền đã được làm trong suốt", passed: backgroundReady && transparencyReady },
-          { id: "parts", label: "HEAD, BODY và LEG lấy trực tiếp từ ảnh", passed: partsReady },
+          { id: "head-joint", label: "HEAD kết thúc tại cổ, không chứa vai", passed: partsReady && headJointReady },
+          { id: "body-joint", label: "BODY giữ vai, thân, tay và bàn tay", passed: partsReady && bodyJointReady },
+          { id: "leg-joint", label: "LEG bắt đầu tại vùng hông hoặc đai dưới", passed: partsReady && legJointReady },
           { id: "similarity", label: "Preview giữ màu và silhouette của ảnh gốc", passed: similarityReady },
           { id: "preview", label: "Preview được ghép lại từ ba part", passed: previewReady },
           { id: "manifest", label: "Manifest static đã tạo", passed: manifestReady },

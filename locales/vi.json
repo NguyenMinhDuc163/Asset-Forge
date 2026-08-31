@@ -40,6 +40,9 @@
   "backgroundCleaned": "Đã làm sạch nền",
   "sourcePreview": "Ảnh nhân vật nguồn",
   "processedPreview": "Ảnh nhân vật sau khi làm sạch nền",
+  "neckLine": "Đường cổ",
+  "hipLine": "Đường hông / đai dưới",
+  "applySplit": "Áp dụng đường tách",
   "profile": "profile",
   "preparing": "Đang chuẩn bị nguyên liệu hình ảnh",
   "preservingReference": "Đang giữ nguyên nhận diện nhân vật",
@@ -149,5 +152,5 @@
   "stageParts": "Tách trực tiếp HEAD / BODY / LEG",
   "stageSimilarity": "So sánh preview với ảnh nguồn",
   "exportNeedsReady": "Cần Static Ready hoặc Game Ready trước khi export",
-  "aiCostHint": "Tạo character animation có thể dùng nhiều lượt AI."
+  "aiCostHint": "AI chỉ tạo design master; HEAD, BODY và LEG được tách bằng pipeline static."
 }
