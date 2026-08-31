@@ -69,7 +69,7 @@ export async function POST(request: Request) {
           source: cached.record.source,
           adapter: { id: cached.record.adapter.id, label: adapter.label },
           validation: cached.record.validation,
-          asset: cached.record.template ? { templateId: cached.record.template, generationMode: cached.record.character?.generationMode || cached.record.generation?.detail, status: cached.record.status, animationStates: cached.record.animations || [] } : undefined,
+          asset: cached.record.template ? { templateId: cached.record.template, generationMode: cached.record.character?.generationMode || cached.record.generation?.detail, pipeline: cached.record.character?.pipeline, status: cached.record.status, animationStates: cached.record.animations || [] } : undefined,
           animation,
         });
       }
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       source: { provider: visual.provider, model: visual.model },
       adapter: { id: output.adapterId, label: adapter.label },
       validation,
-      asset: characterAsset ? { templateId: characterAsset.templateId, generationMode: characterAsset.generationMode, status: validation.status, animationStates: [...new Set(characterAsset.poses.map((pose) => pose.state))] } : undefined,
+      asset: characterAsset ? { templateId: characterAsset.templateId, generationMode: characterAsset.generationMode, pipeline: characterAsset.pipeline, status: validation.status, animationStates: [...new Set(characterAsset.poses.map((pose) => pose.state))] } : undefined,
       animation: output.previewFrames?.map((frame) => ({ poseId: frame.poseId, state: frame.state, base64: frame.buffer.toString("base64"), mimeType: "image/png", width: frame.width, height: frame.height })),
     });
   } catch (error) {

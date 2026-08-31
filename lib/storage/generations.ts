@@ -23,6 +23,7 @@ export interface GenerationRecord {
   character?: {
     templateId: string;
     generationMode: CharacterGenerationMode;
+    pipeline?: CharacterAsset["pipeline"];
     poses: Array<{ id: string; state: string; headFrame: string; bodyFrame: string; legFrame: string; headOffset: { x: number; y: number }; bodyOffset: { x: number; y: number }; legOffset: { x: number; y: number } }>;
   };
   source: { provider: ProviderId; model?: string; file: string };
@@ -94,6 +95,7 @@ export async function saveGeneration(input: {
       character: {
         templateId: input.characterAsset.templateId,
         generationMode: input.characterAsset.generationMode,
+        pipeline: input.characterAsset.pipeline,
         poses: input.characterAsset.poses,
       },
     } : { generation: { mode: "generic" } }),

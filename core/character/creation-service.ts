@@ -1,7 +1,7 @@
 import type { AppSettings } from "@/lib/storage/settings";
 import { getNineRouterKey, getOpenAIKey, hasCodexOAuth } from "@/lib/storage/settings";
 import { normalizeImage } from "@/core/image/normalize";
-import { createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
+import { createDesignMasterCharacter, createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
 import { generateVisual } from "@/core/providers/generate";
 import type { GeneratedVisual } from "@/core/providers/types";
 import type { CharacterAsset, CharacterGenerationMode } from "./types";
@@ -85,6 +85,6 @@ export async function createCharacter(input: CharacterCreationInput): Promise<Ch
   if (!await isHumanoidCompatible(normalized.buffer)) {
     throw new Error("Ảnh nguồn AI không tạo ra silhouette humanoid phù hợp với template game.");
   }
-  const template = await createTemplateCharacter({ name: input.name, mode: "ai", reference: normalized.buffer, prompt: input.prompt });
+  const template = await createDesignMasterCharacter({ name: input.name, designMaster: normalized.buffer, prompt: input.prompt });
   return { mode, visual, normalized, asset: template.asset };
 }

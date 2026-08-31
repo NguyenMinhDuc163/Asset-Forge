@@ -50,4 +50,5 @@ export interface CharacterAsset {
   poses: CharacterPoseMapping[];
   previewFrames: Array<{ poseId: string; state: CharacterPose["state"]; buffer: Buffer; width: number; height: number }>;
   status: CharacterAssetStatus;
+  pipeline?: { designMaster: "ai" | "reference" | "template"; poseSource: "ai" | "template" };
 }

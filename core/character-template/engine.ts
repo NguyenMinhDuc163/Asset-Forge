@@ -191,8 +191,68 @@ export async function createTemplateCharacter(input: { name: string; mode: "temp
     // The template engine produces every required MVP frame and a rendered
     // preview, so the adapter can validate this as game-ready immediately.
     status: "game-ready",
+    pipeline: { designMaster: input.mode === "ai" ? "ai" : input.mode === "template-reference" ? "reference" : "template", poseSource: "template" },
   };
   const previewFrames = await Promise.all(poses.map(async (pose) => ({ poseId: pose.id, state: pose.state, buffer: await renderCharacterPose(assetBase, pose), width: 64, height: 128 })));
   const asset: CharacterAsset = { ...assetBase, previewFrames };
   return { asset, palette };
+}
+
+async function alphaBounds(input: Buffer) {
+  const { data, info } = await sharp(input, { limitInputPixels: 64_000_000 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let left = info.width;
+  let right = -1;
+  let top = info.height;
+  let bottom = -1;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      if (data[(y * info.width + x) * info.channels + 3] <= 12) continue;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  return right < left || bottom < top ? undefined : { left, right, top, bottom, width: info.width, height: info.height };
+}
+
+/** Turn an AI design-master image into template-compatible parts once. */
+export async function createDesignMasterCharacter(input: { name: string; designMaster: Buffer; prompt?: string; id?: string }): Promise<TemplateCharacterResult> {
+  const bounds = await alphaBounds(input.designMaster);
+  if (!bounds) throw new Error("Ảnh design master không có silhouette rõ ràng.");
+  const height = bounds.bottom - bounds.top + 1;
+  const width = bounds.right - bounds.left + 1;
+  const source = sharp(input.designMaster, { limitInputPixels: 64_000_000 });
+  const ranges = {
+    head: [0, 0.34],
+    body: [0.25, 0.72],
+    leg: [0.6, 1],
+  } as const;
+  const parts = {} as Record<"head" | "body" | "leg", CharacterFrame[]>;
+  for (const part of ["head", "body", "leg"] as const) {
+    const [start, end] = ranges[part];
+    const top = bounds.top + Math.floor(height * start);
+    const cropHeight = Math.max(1, Math.min(bounds.height - top, Math.ceil(height * (end - start))));
+    const buffer = await source.clone()
+      .extract({ left: bounds.left, top, width, height: cropHeight })
+      .resize(64, 64, { fit: "contain", kernel: sharp.kernel.nearest, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png({ palette: true, colours: 128 })
+      .toBuffer();
+    parts[part] = [{ id: `${part}-master`, imagePath: `sprites/${part}/${part}-master.png`, dx: 0, dy: 0, width: 64, height: 64, buffer }];
+  }
+  const poses: CharacterPoseMapping[] = nroHumanoidTemplate.poses.map((pose) => ({ ...pose, headFrame: "head-master", bodyFrame: "body-master", legFrame: "leg-master" }));
+  const id = input.id || createHash("sha1").update(input.name).update(input.designMaster).digest("hex").slice(0, 16);
+  const assetBase: CharacterAsset = {
+    id,
+    name: input.name,
+    templateId: nroHumanoidTemplate.id,
+    generationMode: "ai",
+    parts: { head: { frames: parts.head }, body: { frames: parts.body }, leg: { frames: parts.leg } },
+    poses,
+    previewFrames: [],
+    status: "game-ready",
+    pipeline: { designMaster: "ai", poseSource: "template" },
+  };
+  const previewFrames = await Promise.all(poses.map(async (pose) => ({ poseId: pose.id, state: pose.state, buffer: await renderCharacterPose(assetBase, pose), width: 64, height: 128 })));
+  return { asset: { ...assetBase, previewFrames }, palette: await extractSemanticPalette(input.designMaster, input.prompt) };
 }
