@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { SettingsPanel } from "./settings-panel";
-import type { ProviderId } from "@/lib/storage/settings";
+import type { ProviderId, ThemePreference } from "@/lib/storage/settings";
 import { getCopy, type Locale } from "@/lib/i18n";
 
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
@@ -20,6 +20,7 @@ export function StudioWorkspace() {
   const [studioState, setStudioState] = useState<StudioState>("empty");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderId>("openai");
+  const [theme, setTheme] = useState<ThemePreference>("system");
   const [projectLabel, setProjectLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [resultMeta, setResultMeta] = useState({ adapter: "NRO Legacy", width: 64, height: 128, checks: [] as string[] });
@@ -28,21 +29,27 @@ export function StudioWorkspace() {
   const [exportMessage, setExportMessage] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string }) => {
+  const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string; theme: ThemePreference }) => {
     setProvider(settings.provider);
     setLocale(settings.locale);
     setProjectLabel(settings.projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "");
+    setTheme(settings.theme);
+    document.documentElement.dataset.theme = settings.theme;
   }, []);
 
   useEffect(() => {
     let active = true;
     fetch("/api/settings")
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((settings: { provider: ProviderId; locale?: Locale; projectRoot?: string }) => {
+      .then((settings: { provider: ProviderId; locale?: Locale; projectRoot?: string; theme?: ThemePreference }) => {
         if (!active) return;
         setProvider(settings.provider);
         setLocale(settings.locale || "vi");
         setProjectLabel(settings.projectRoot?.split(/[\\/]/).filter(Boolean).at(-1) || "");
+        const nextTheme = settings.theme || "system";
+        setTheme(nextTheme);
+        localStorage.setItem("contentforge-theme", nextTheme);
+        document.documentElement.dataset.theme = nextTheme;
       })
       .catch(() => undefined);
     return () => { active = false; };
@@ -117,6 +124,15 @@ export function StudioWorkspace() {
     await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: nextLocale }) }).catch(() => undefined);
   }
 
+  async function toggleTheme() {
+    const darkNow = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const nextTheme: ThemePreference = darkNow ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("contentforge-theme", nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme: nextTheme }) }).catch(() => undefined);
+  }
+
   return (
     <main className="min-h-[100dvh] bg-[var(--canvas)] text-[var(--ink)]">
       <header className="border-b border-[var(--line)] bg-[color:var(--canvas)/0.94]">
@@ -133,6 +149,7 @@ export function StudioWorkspace() {
             <div className="flex rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface)] p-0.5" aria-label={t.language}>
               {(["vi", "en"] as const).map((language) => <button key={language} type="button" aria-pressed={locale === language} onClick={() => changeLocale(language)} className={`min-h-8 rounded-[7px] px-2.5 font-mono text-[10px] font-semibold uppercase ${locale === language ? "bg-[var(--ink)] text-[var(--surface)]" : "text-[var(--muted)]"}`}>{language}</button>)}
             </div>
+            <button className="control-button size-10 px-0" type="button" onClick={toggleTheme} aria-label={t.toggleTheme} title={t.toggleTheme}>{theme === "dark" ? "☼" : "◐"}</button>
             <button className="control-button" type="button" onClick={() => setSettingsOpen(true)}>{t.settings}</button>
           </div>
         </div>
@@ -199,7 +216,7 @@ export function StudioWorkspace() {
 
             <div className="mt-auto pt-7">
               <div className="mb-3 flex items-center justify-between text-xs text-[var(--muted)]">
-                <span>{provider === "openai" ? t.openaiAuto : t.manualMode}</span>
+                <span>{provider === "openai" ? t.openaiAuto : provider === "nine-router" ? t.nineRouterMode : t.manualMode}</span>
                 <button type="button" className="font-medium text-[var(--ink)] underline decoration-[var(--line-strong)] underline-offset-4" onClick={() => setSettingsOpen(true)}>{t.change}</button>
               </div>
               {provider === "manual" && !reference && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.manualNeedsImage}</p>}
@@ -236,7 +253,7 @@ export function StudioWorkspace() {
             </div>
 
             <div className="mt-4 min-h-16">
-              {errorMessage && <div className="mb-3 rounded-[10px] bg-[#f8e7e1] px-3 py-2 text-sm text-[#87391b]" role="alert">{errorMessage}</div>}
+              {errorMessage && <div className="mb-3 rounded-[10px] bg-[var(--error-soft)] px-3 py-2 text-sm text-[var(--error)]" role="alert">{errorMessage}</div>}
               {studioState === "ready" ? (
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div><p className="text-sm font-semibold text-[var(--success)]">{t.ready}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
@@ -245,7 +262,7 @@ export function StudioWorkspace() {
               ) : (
                 <div className="flex items-center justify-between text-xs text-[var(--muted)]"><span>{t.previewReflects}</span><span className="font-mono">PNG</span></div>
               )}
-              {exportStatus === "done" && <p className="mt-3 break-all rounded-[10px] bg-[#e4eee7] px-3 py-2 text-xs text-[var(--success)]" role="status">{t.savedTo} {exportMessage}</p>}
+              {exportStatus === "done" && <p className="mt-3 break-all rounded-[10px] bg-[var(--success-soft)] px-3 py-2 text-xs text-[var(--success)]" role="status">{t.savedTo} {exportMessage}</p>}
             </div>
           </div>
         </section>

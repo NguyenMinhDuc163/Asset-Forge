@@ -3,19 +3,22 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Locale } from "@/lib/i18n";
 
-export type ProviderId = "openai" | "manual";
+export type ProviderId = "openai" | "nine-router" | "manual";
+export type ThemePreference = "light" | "dark" | "system";
 
 export interface AppSettings {
   provider: ProviderId;
   imageModel: string;
+  nineRouterUrl: string;
   projectRoot: string;
   adapterId: string;
   locale: Locale;
+  theme: ThemePreference;
 }
 
-interface AppSecrets { openaiApiKey?: string }
+interface AppSecrets { openaiApiKey?: string; nineRouterApiKey?: string }
 
-const defaults: AppSettings = { provider: "openai", imageModel: "auto", projectRoot: "", adapterId: "nro-legacy-v1", locale: "vi" };
+const defaults: AppSettings = { provider: "openai", imageModel: "auto", nineRouterUrl: "http://localhost:20128", projectRoot: "", adapterId: "nro-legacy-v1", locale: "vi", theme: "system" };
 
 function configRoot() { return process.env.CONTENTFORGE_HOME || join(homedir(), ".contentforge"); }
 function settingsPath() { return join(configRoot(), "settings.json"); }
@@ -50,4 +53,10 @@ export async function getOpenAIKey(): Promise<string | undefined> { return (awai
 export async function saveOpenAIKey(apiKey: string): Promise<void> {
   const secrets = await readJson<AppSecrets>(secretsPath(), {});
   await atomicWriteJson(secretsPath(), { ...secrets, openaiApiKey: apiKey.trim() }, 0o600);
+}
+export async function hasNineRouterKey(): Promise<boolean> { return Boolean((await readJson<AppSecrets>(secretsPath(), {})).nineRouterApiKey); }
+export async function getNineRouterKey(): Promise<string | undefined> { return (await readJson<AppSecrets>(secretsPath(), {})).nineRouterApiKey; }
+export async function saveNineRouterKey(apiKey: string): Promise<void> {
+  const secrets = await readJson<AppSecrets>(secretsPath(), {});
+  await atomicWriteJson(secretsPath(), { ...secrets, nineRouterApiKey: apiKey.trim() }, 0o600);
 }

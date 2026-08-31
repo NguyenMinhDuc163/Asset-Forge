@@ -4,10 +4,12 @@ import { getAdapter } from "@/core/adapters";
 import { normalizeImage } from "@/core/image/normalize";
 import { ManualImageProvider } from "@/core/providers/manual-provider";
 import { OpenAIImageProvider } from "@/core/providers/openai-provider";
+import { NineRouterImageProvider } from "@/core/providers/nine-router-provider";
 import type { GeneratedVisual } from "@/core/providers/types";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
-import { getOpenAIKey, getSettings } from "@/lib/storage/settings";
+import { discoverNineRouterImageModels } from "@/lib/nine-router/client";
+import { getNineRouterKey, getOpenAIKey, getSettings } from "@/lib/storage/settings";
 import { saveGeneration } from "@/lib/storage/generations";
 
 export const runtime = "nodejs";
@@ -39,13 +41,22 @@ export async function POST(request: Request) {
     let visual: GeneratedVisual;
     if (settings.provider === "manual") {
       visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
-    } else {
+    } else if (settings.provider === "openai") {
       if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
       const apiKey = await getOpenAIKey();
       if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
       const availableModels = await discoverImageModels(apiKey);
       const model = resolveImageModel(settings.imageModel, availableModels);
       visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
+    } else {
+      if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
+      const apiKey = await getNineRouterKey();
+      const availableModels = await discoverNineRouterImageModels(settings.nineRouterUrl, apiKey);
+      const model = settings.imageModel === "auto" ? availableModels[0]?.id : settings.imageModel;
+      if (!model || !availableModels.some((item) => item.id === model)) {
+        return NextResponse.json({ message: "Model ảnh đã chọn không khả dụng trong 9Router." }, { status: 400 });
+      }
+      visual = await new NineRouterImageProvider(settings.nineRouterUrl, apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
     }
     const normalized = await normalizeImage(visual.buffer, adapter.getNormalizeOptions(context));
     const output = await adapter.transform(normalized, context);
@@ -62,6 +73,10 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && /^(Ảnh nguồn|Không thể xác định|Thêm ảnh nguồn|Đường dẫn)/.test(error.message)) {
       console.error("Deterministic asset processing failed", error);
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+    if (error instanceof Error && error.name === "NineRouterError") {
+      console.error("9Router asset generation failed", error);
       return NextResponse.json({ message: error.message }, { status: 400 });
     }
     const friendlyError = toOpenAIProviderError(error);

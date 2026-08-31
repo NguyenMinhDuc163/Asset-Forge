@@ -22,7 +22,7 @@ export class NroLegacyAdapter implements AssetAdapter {
 
   getNormalizeOptions(context: AdapterContext) {
     if (context.kind === "character") {
-      return context.provider === "openai"
+      return context.provider !== "manual"
         ? { width: partSize * 3, height: partSize, pixelArt: true, paletteColours: 128 }
         : { width: partSize, height: partSize * 3, pixelArt: true, paletteColours: 128 };
     }
@@ -40,7 +40,7 @@ export class NroLegacyAdapter implements AssetAdapter {
       };
     }
 
-    const horizontal = context.provider === "openai";
+    const horizontal = context.provider !== "manual";
     const parts = await Promise.all(partNames.map(async (name, index) => {
       const extracted = await sharp(input.buffer)
         .extract(horizontal

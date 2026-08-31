@@ -12,13 +12,13 @@ export interface ProviderGenerateInput {
 export interface GeneratedVisual {
   buffer: Buffer;
   mimeType: string;
-  provider: "openai" | "manual";
+  provider: "openai" | "nine-router" | "manual";
   model?: string;
   revisedPrompt?: string;
 }
 
 export interface AssetGenerationProvider {
-  readonly id: "openai" | "manual";
+  readonly id: "openai" | "nine-router" | "manual";
   readonly label: string;
   readonly canGenerateFromText: boolean;
   readonly canEditImage: boolean;

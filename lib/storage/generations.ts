@@ -13,7 +13,7 @@ export interface GenerationRecord {
   name: string;
   kind: AssetKind;
   createdAt: string;
-  source: { provider: "openai" | "manual"; model?: string; file: string };
+  source: { provider: "openai" | "nine-router" | "manual"; model?: string; file: string };
   visual: { width: number; height: number; format: "png"; file: string };
   adapter: { id: string; metadata: Record<string, unknown> };
   validation: ValidationResult;

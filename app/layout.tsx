@@ -22,7 +22,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head><script dangerouslySetInnerHTML={{ __html: `try{document.documentElement.dataset.theme=localStorage.getItem('contentforge-theme')||'system'}catch(e){document.documentElement.dataset.theme='system'}` }} /></head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
