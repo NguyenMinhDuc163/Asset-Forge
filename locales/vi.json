@@ -129,5 +129,6 @@
   "stageDesign": "Đồng bộ phong cách game",
   "stageFrames": "Tạo frame chuyển động",
   "stageValidation": "Kiểm tra output",
-  "exportNeedsReady": "Cần Game Ready trước khi export"
+  "exportNeedsReady": "Cần Game Ready trước khi export",
+  "aiCostHint": "Tạo character animation có thể dùng nhiều lượt AI."
 }

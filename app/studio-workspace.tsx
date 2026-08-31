@@ -299,6 +299,7 @@ export function StudioWorkspace() {
                 {activeProviderDefinition.kind === "remote" && <p className="mt-2 pl-11 text-xs leading-5 text-[var(--muted)]">{activeProvider.description}</p>}
               </div>
               <p className="mt-2 text-[11px] leading-4 text-[var(--faint)]">{t.providerPickerHelp}</p>
+              {assetKind === "Character" && activeProviderDefinition.kind === "remote" && <p className="mt-2 text-[11px] leading-4 text-[var(--muted)]">{t.aiCostHint}</p>}
             </div>
 
             <label className="mb-3 text-sm font-semibold" htmlFor="asset-prompt">{t.describe} {t[assetKind.toLowerCase() as "character" | "environment" | "item" | "effect"].toLowerCase()}</label>

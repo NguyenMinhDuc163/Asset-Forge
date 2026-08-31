@@ -129,5 +129,6 @@
   "stageDesign": "Matching the game style",
   "stageFrames": "Creating movement frames",
   "stageValidation": "Validating the output",
-  "exportNeedsReady": "Game Ready is required before export"
+  "exportNeedsReady": "Game Ready is required before export",
+  "aiCostHint": "Animated characters may use multiple AI generations."
 }
