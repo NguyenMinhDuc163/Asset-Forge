@@ -118,8 +118,8 @@ export class NroLegacyAdapter implements AssetAdapter {
     files.push({ path: "atlas.png", buffer: atlas, mimeType: "image/png" });
     files.push({ path: "preview/character.png", buffer: asset.previewFrames[0].buffer, mimeType: "image/png" });
     files.push({ path: "atlas.json", buffer: Buffer.from(JSON.stringify({ width: atlasColumns * partSize, height: atlasRows * partSize, frames: atlasEntries }, null, 2)), mimeType: "application/json" });
-    files.push({ path: "game/character.json", buffer: Buffer.from(JSON.stringify({ type: "character", template: asset.templateId, generation: { mode: asset.generationMode === "ai" ? "ai" : "template" }, status: asset.status, animations: [...new Set(poseMappings.map((pose) => pose.state))], parts: { head: asset.parts.head.frames.map(frameForManifest), body: asset.parts.body.frames.map(frameForManifest), leg: asset.parts.leg.frames.map(frameForManifest) }, poses: poseMappings }, null, 2)), mimeType: "application/json" });
-    files.push({ path: "game/parts.json", buffer: Buffer.from(JSON.stringify({ template: asset.templateId, parts: ["head", "body", "leg"], poses: poseMappings }, null, 2)), mimeType: "application/json" });
+    files.push({ path: "game/character.json", buffer: Buffer.from(JSON.stringify({ type: "character", template: asset.templateId, generation: { mode: asset.generationMode === "ai" ? "ai" : "template" }, status: asset.status, direction: { canonical: "right", mirror: "horizontal" }, animations: [...new Set(poseMappings.map((pose) => pose.state))], parts: { head: asset.parts.head.frames.map(frameForManifest), body: asset.parts.body.frames.map(frameForManifest), leg: asset.parts.leg.frames.map(frameForManifest) }, poses: poseMappings }, null, 2)), mimeType: "application/json" });
+    files.push({ path: "game/parts.json", buffer: Buffer.from(JSON.stringify({ template: asset.templateId, parts: ["head", "body", "leg"], direction: { canonical: "right", mirror: "horizontal" }, poses: poseMappings }, null, 2)), mimeType: "application/json" });
     files.push({ path: "integration/small-images.json", buffer: Buffer.from(JSON.stringify({ format: "nro-small-image-v2", images: atlasEntries, poses: poseMappings }, null, 2)), mimeType: "application/json" });
     return {
       adapterId: this.id,
@@ -196,7 +196,7 @@ export class NroLegacyAdapter implements AssetAdapter {
     const frameCount = Number(output.metadata.frameCount || 0);
     const atlasFrames = Array.isArray(output.metadata.smallImages) ? output.metadata.smallImages as Array<{ id?: string; width?: number; height?: number }> : [];
     const frameRefsReady = poseMappings.every((pose) => [pose.headFrame, pose.bodyFrame, pose.legFrame].every((frameId) => typeof frameId === "string" && atlasFrames.some((frame) => frame.id === frameId)));
-    const offsetsReady = poseMappings.every((pose) => [pose.headOffset, pose.bodyOffset, pose.legOffset].every((offset) => typeof offset?.x === "number" && typeof offset?.y === "number"));
+    const offsetsReady = poseMappings.every((pose) => [pose.headOffset, pose.bodyOffset, pose.legOffset].every((offset) => typeof offset?.x === "number" && typeof offset?.y === "number" && Math.abs(offset.x) <= partSize && Math.abs(offset.y) <= partSize));
     const templateReady = output.metadata.templateId === "nro-humanoid-v1";
     const formatReady = output.files.filter((file) => file.mimeType === "image/png").length >= 4;
     const metadataReady = available.has("integration/small-images.json");
