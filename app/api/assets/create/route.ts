@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { assetKinds, type AssetKind } from "@/core/assets/types";
+import { processGeneratedVisual } from "@/core/assets/pipeline";
 import { ManualImageProvider } from "@/core/providers/manual-provider";
 import { OpenAIImageProvider } from "@/core/providers/openai-provider";
+import type { GeneratedVisual } from "@/core/providers/types";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { getOpenAIKey, getSettings } from "@/lib/storage/settings";
@@ -28,20 +30,22 @@ export async function POST(request: Request) {
     }
 
     const settings = await getSettings();
+    let visual: GeneratedVisual;
     if (settings.provider === "manual") {
-      const visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
-      return NextResponse.json({ image: { base64: visual.buffer.toString("base64"), mimeType: visual.mimeType }, source: { provider: visual.provider } });
+      visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
+    } else {
+      if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
+      const apiKey = await getOpenAIKey();
+      if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
+      const availableModels = await discoverImageModels(apiKey);
+      const model = resolveImageModel(settings.imageModel, availableModels);
+      visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model });
     }
-
-    if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
-    const apiKey = await getOpenAIKey();
-    if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
-    const availableModels = await discoverImageModels(apiKey);
-    const model = resolveImageModel(settings.imageModel, availableModels);
-    const visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model });
+    const normalized = await processGeneratedVisual(kind, visual);
     return NextResponse.json({
-      image: { base64: visual.buffer.toString("base64"), mimeType: visual.mimeType },
+      image: { base64: normalized.buffer.toString("base64"), mimeType: "image/png", width: normalized.width, height: normalized.height },
       source: { provider: visual.provider, model: visual.model },
+      validation: { ready: true, checks: ["format", "dimensions", "alpha"] },
     });
   } catch (error) {
     const friendlyError = toOpenAIProviderError(error);

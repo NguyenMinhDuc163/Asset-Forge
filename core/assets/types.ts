@@ -10,3 +10,11 @@ export interface CreateAssetInput {
   referenceMimeType?: string;
   provider: "openai" | "manual";
 }
+
+export interface NormalizedAsset {
+  buffer: Buffer;
+  width: number;
+  height: number;
+  format: "png";
+  hasAlpha: boolean;
+}
