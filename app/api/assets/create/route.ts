@@ -8,6 +8,7 @@ import type { GeneratedVisual } from "@/core/providers/types";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { getOpenAIKey, getSettings } from "@/lib/storage/settings";
+import { saveGeneration } from "@/lib/storage/generations";
 
 export const runtime = "nodejs";
 const maxUploadBytes = 10 * 1024 * 1024;
@@ -50,7 +51,9 @@ export async function POST(request: Request) {
     const output = await adapter.transform(normalized, context);
     const validation = await adapter.validate(output);
     if (!validation.ready) return NextResponse.json({ message: "Ảnh này chưa thể chuyển đổi an toàn cho game profile đã chọn. Hãy thử ảnh khác." }, { status: 422 });
+    const generation = await saveGeneration({ name: prompt || `${kind}-asset`, kind, source: visual, normalized, output, validation });
     return NextResponse.json({
+      generationId: generation.id,
       image: { base64: output.preview.buffer.toString("base64"), mimeType: output.preview.mimeType, width: output.preview.width, height: output.preview.height },
       source: { provider: visual.provider, model: visual.model },
       adapter: { id: output.adapterId, label: adapter.label },
