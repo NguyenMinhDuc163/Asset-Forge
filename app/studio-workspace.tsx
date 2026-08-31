@@ -5,6 +5,7 @@ import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from
 import { SettingsPanel } from "./settings-panel";
 import type { ExportMode, ProviderId, ThemePreference } from "@/lib/storage/settings";
 import { getCopy, type Locale } from "@/lib/i18n";
+import { getProviderDefinition, providerCatalog } from "@/core/providers/catalog";
 
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
 type AssetKind = (typeof assetKinds)[number];
@@ -33,6 +34,15 @@ export function StudioWorkspace() {
   const [exportMessage, setExportMessage] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const providerCopy: Record<ProviderId, { label: string; description: string }> = {
+    manual: { label: t.noAi, description: t.manualMode },
+    openai: { label: t.openai, description: t.openaiAuto },
+    "nine-router": { label: t.nineRouter, description: t.nineRouterMode },
+  };
+  const activeProvider = providerCopy[provider];
+  const activeProviderDefinition = getProviderDefinition(provider);
+  const requiresReference = activeProviderDefinition.requiresReference;
+  const remoteProviders = providerCatalog.filter((item) => item.kind === "remote");
   const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string; theme: ThemePreference; exportMode: ExportMode }) => {
     setProvider(settings.provider);
     setLocale(settings.locale);
@@ -245,9 +255,22 @@ export function StudioWorkspace() {
 
             <div className="mb-6">
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--faint)]">{t.generationSource}</p>
-              <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-[var(--soft)] p-1">
-                {(["manual", "openai", "nine-router"] as const).map((item) => <button key={item} type="button" aria-pressed={provider === item} onClick={() => changeProvider(item)} className={`min-h-10 rounded-[9px] px-2 text-xs font-semibold transition ${provider === item ? "bg-[var(--surface)] text-[var(--ink)] shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>{item === "manual" ? t.noAi : item === "openai" ? t.openai : t.nineRouter}</button>)}
+              <div className="rounded-[12px] border border-[var(--line-strong)] bg-[var(--canvas)] p-3">
+                <div className="grid grid-cols-2 gap-1 rounded-[9px] bg-[var(--soft)] p-1">
+                  <button type="button" aria-pressed={activeProviderDefinition.kind === "local"} onClick={() => changeProvider("manual")} className={`min-h-9 rounded-[7px] px-3 text-xs font-semibold transition ${activeProviderDefinition.kind === "local" ? "bg-[var(--surface)] text-[var(--ink)] shadow-[0_1px_4px_rgba(0,0,0,0.1)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>{t.directMode}</button>
+                  <button type="button" aria-pressed={activeProviderDefinition.kind === "remote"} onClick={() => changeProvider(activeProviderDefinition.kind === "remote" ? provider : "openai")} className={`min-h-9 rounded-[7px] px-3 text-xs font-semibold transition ${activeProviderDefinition.kind === "remote" ? "bg-[var(--surface)] text-[var(--ink)] shadow-[0_1px_4px_rgba(0,0,0,0.1)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>{t.aiApiMode}</button>
+                </div>
+                {activeProviderDefinition.kind === "remote" ? (
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-[8px] bg-[var(--soft)] font-mono text-[10px] font-bold text-[var(--accent-strong)]">AI</span>
+                    <select id="generation-provider" name="generation-provider" className="field min-w-0 flex-1 bg-[var(--surface)]" value={provider} onChange={(event) => changeProvider(event.target.value as ProviderId)} aria-label={t.provider}>
+                      {remoteProviders.map((item) => <option key={item.id} value={item.id}>{providerCopy[item.id].label}</option>)}
+                    </select>
+                  </div>
+                ) : <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{activeProvider.description}</p>}
+                {activeProviderDefinition.kind === "remote" && <p className="mt-2 pl-11 text-xs leading-5 text-[var(--muted)]">{activeProvider.description}</p>}
               </div>
+              <p className="mt-2 text-[11px] leading-4 text-[var(--faint)]">{t.providerPickerHelp}</p>
             </div>
 
             <label className="mb-3 text-sm font-semibold" htmlFor="asset-prompt">{t.describe} {t[assetKind.toLowerCase() as "character" | "environment" | "item" | "effect"].toLowerCase()}</label>
@@ -283,11 +306,11 @@ export function StudioWorkspace() {
 
             <div className="mt-auto pt-7">
               <div className="mb-3 flex items-center justify-between text-xs text-[var(--muted)]">
-                <span>{provider === "openai" ? t.openaiAuto : provider === "nine-router" ? t.nineRouterMode : t.manualMode}</span>
+                <span>{activeProvider.description}</span>
                 <button type="button" className="font-medium text-[var(--ink)] underline decoration-[var(--line-strong)] underline-offset-4" onClick={() => setSettingsOpen(true)}>{t.change}</button>
               </div>
-              {provider === "manual" && !reference && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.manualNeedsImage}</p>}
-              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference) || (provider === "manual" && !reference) || studioState === "creating"} className="primary-button w-full">
+              {requiresReference && !reference && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.manualNeedsImage}</p>}
+              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference) || (requiresReference && !reference) || studioState === "creating"} className="primary-button w-full">
                 {studioState === "creating" ? t.creating : t.create}
               </button>
             </div>

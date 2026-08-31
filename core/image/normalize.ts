@@ -6,6 +6,7 @@ export interface NormalizeOptions {
   height: number;
   pixelArt?: boolean;
   paletteColours?: number;
+  removeSolidBackground?: boolean;
 }
 
 const defaultTargets: Record<AssetKind, NormalizeOptions> = {
@@ -33,7 +34,33 @@ export async function normalizeImage(input: Buffer, options: NormalizeOptions): 
   if (!metadata.width || !metadata.height) throw new Error("Không thể xác định kích thước ảnh nguồn.");
 
   let image = sharp(input, { failOn: "error", limitInputPixels: 64_000_000 }).rotate();
-  if (metadata.hasAlpha) {
+  if (options.removeSolidBackground) {
+    const { data, info } = await image
+      .clone()
+      .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixelAt = (x: number, y: number) => {
+      const offset = (y * info.width + x) * info.channels;
+      return [data[offset], data[offset + 1], data[offset + 2]] as const;
+    };
+    const corners = [pixelAt(0, 0), pixelAt(info.width - 1, 0), pixelAt(0, info.height - 1), pixelAt(info.width - 1, info.height - 1)];
+    const background = [0, 1, 2].map((channel) => Math.round(corners.reduce((sum, colour) => sum + colour[channel], 0) / corners.length));
+    const cornerSpread = Math.max(...corners.flatMap((colour) => colour.map((value, channel) => Math.abs(value - background[channel]))));
+    if (cornerSpread <= 36) {
+      for (let offset = 0; offset < data.length; offset += info.channels) {
+        const distance = Math.max(
+          Math.abs(data[offset] - background[0]),
+          Math.abs(data[offset + 1] - background[1]),
+          Math.abs(data[offset + 2] - background[2]),
+        );
+        if (distance <= 24) data[offset + 3] = 0;
+        else if (distance < 48) data[offset + 3] = Math.min(data[offset + 3], Math.round(((distance - 24) / 24) * 255));
+      }
+    }
+    image = sharp(data, { raw: info }).trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 4 });
+  } else if (metadata.hasAlpha) {
     image = image.trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 8 });
   }
 
@@ -63,5 +90,13 @@ export async function normalizeImage(input: Buffer, options: NormalizeOptions): 
     .png({ palette: true, colours: options.paletteColours || 128, compressionLevel: 9 })
     .toBuffer();
 
-  return { buffer, width: options.width, height: options.height, format: "png", hasAlpha: true };
+  return {
+    buffer,
+    width: options.width,
+    height: options.height,
+    format: "png",
+    hasAlpha: true,
+    sourceWidth: metadata.width,
+    sourceHeight: metadata.height,
+  };
 }

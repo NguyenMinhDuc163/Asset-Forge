@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isProviderId } from "@/core/providers/catalog";
 import { autoModel, discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
 import { discoverNineRouterImageModels, NineRouterError, normalizeNineRouterUrl } from "@/lib/nine-router/client";
@@ -16,7 +17,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = (await request.json()) as { provider?: ProviderId; apiKey?: string; openaiAuthMode?: OpenAIAuthMode; nineRouterApiKey?: string; nineRouterUrl?: string; imageModel?: string; projectRoot?: string; adapterId?: string; locale?: Locale; theme?: ThemePreference; exportMode?: ExportMode };
-    if (body.provider && !["openai", "nine-router", "manual"].includes(body.provider)) {
+    if (body.provider && !isProviderId(body.provider)) {
       return NextResponse.json({ message: "Choose a supported provider." }, { status: 400 });
     }
     let compatibleModels;

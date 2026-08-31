@@ -53,6 +53,7 @@ export function SettingsPanel({ open, onClose, onSaved, locale }: SettingsPanelP
   const [message, setMessage] = useState("");
   const [models, setModels] = useState<FriendlyModel[]>([{ id: "auto", label: "Tự động", description: "Đề xuất", recommended: true }]);
   const [oauthStatus, setOauthStatus] = useState<"idle" | "connecting" | "error">("idle");
+  const providerName: Record<ProviderId, string> = { manual: t.noAi, openai: t.openai, "nine-router": t.nineRouter };
 
   useEffect(() => {
     if (!open) return;
@@ -163,13 +164,14 @@ export function SettingsPanel({ open, onClose, onSaved, locale }: SettingsPanelP
         </div>
 
         <div className={`space-y-5 ${status === "loading" ? "pointer-events-none opacity-55" : ""}`}>
-          <label className="block text-sm font-semibold">{t.provider}
-            <select className="field mt-2" value={settings.provider} onChange={(event) => { setModels([{ id: "auto", label: t.automatic, description: t.recommended, recommended: true }]); setSettings({ ...settings, provider: event.target.value as ProviderId, imageModel: "auto" }); }}>
-              <option value="openai">{t.openai}</option>
-              <option value="nine-router">{t.nineRouter}</option>
-              <option value="manual">{t.noAi}</option>
-            </select>
-          </label>
+          <div className="rounded-[12px] border border-[var(--line)] bg-[var(--canvas)] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--faint)]">{t.selectedSource}</p>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold">{providerName[settings.provider]}</p>
+              <span className="rounded-full bg-[var(--soft)] px-2 py-1 font-mono text-[9px] font-semibold uppercase text-[var(--muted)]">{settings.provider === "manual" ? "LOCAL" : "API"}</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t.sourceManagedInWorkspace}</p>
+          </div>
 
           {settings.provider === "openai" && (
             <>

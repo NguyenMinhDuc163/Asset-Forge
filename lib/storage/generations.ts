@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { AssetKind, NormalizedAsset } from "@/core/assets/types";
 import type { AdapterOutput, ValidationResult } from "@/core/adapters/types";
 import type { GeneratedVisual } from "@/core/providers/types";
+import type { ProviderId } from "@/core/providers/catalog";
 import { safeJoin } from "@/lib/fs/safe-path";
 
 export interface GenerationRecord {
@@ -13,7 +14,7 @@ export interface GenerationRecord {
   name: string;
   kind: AssetKind;
   createdAt: string;
-  source: { provider: "openai" | "nine-router" | "manual"; model?: string; file: string };
+  source: { provider: ProviderId; model?: string; file: string };
   visual: { width: number; height: number; format: "png"; file: string };
   adapter: { id: string; metadata: Record<string, unknown> };
   validation: ValidationResult;

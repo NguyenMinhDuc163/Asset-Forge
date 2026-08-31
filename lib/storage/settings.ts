@@ -2,8 +2,9 @@ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Locale } from "@/lib/i18n";
+import type { ProviderId } from "@/core/providers/catalog";
 
-export type ProviderId = "openai" | "nine-router" | "manual";
+export type { ProviderId } from "@/core/providers/catalog";
 export type ThemePreference = "light" | "dark" | "system";
 export type OpenAIAuthMode = "api-key" | "codex-oauth";
 export type ExportMode = "download" | "browser-folder";

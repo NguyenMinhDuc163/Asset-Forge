@@ -8,7 +8,7 @@ export interface CreateAssetInput {
   prompt?: string;
   referenceImage?: Buffer;
   referenceMimeType?: string;
-  provider: "openai" | "manual";
+  provider: import("@/lib/storage/settings").ProviderId;
 }
 
 export interface NormalizedAsset {
@@ -17,4 +17,6 @@ export interface NormalizedAsset {
   height: number;
   format: "png";
   hasAlpha: boolean;
+  sourceWidth: number;
+  sourceHeight: number;
 }

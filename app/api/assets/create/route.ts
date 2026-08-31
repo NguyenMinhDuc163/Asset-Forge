@@ -2,16 +2,9 @@ import { NextResponse } from "next/server";
 import { assetKinds, type AssetKind } from "@/core/assets/types";
 import { getAdapter } from "@/core/adapters";
 import { normalizeImage } from "@/core/image/normalize";
-import { ManualImageProvider } from "@/core/providers/manual-provider";
-import { OpenAIImageProvider } from "@/core/providers/openai-provider";
-import { CodexOAuthImageProvider } from "@/core/providers/codex-oauth-provider";
-import { NineRouterImageProvider } from "@/core/providers/nine-router-provider";
-import type { GeneratedVisual } from "@/core/providers/types";
+import { generateVisual } from "@/core/providers/generate";
 import { toOpenAIProviderError } from "@/lib/openai/errors";
-import { discoverImageModels, resolveImageModel } from "@/lib/openai/model-catalog";
-import { discoverNineRouterImageModels } from "@/lib/nine-router/client";
-import { codexImageModels } from "@/lib/codex/client";
-import { getNineRouterKey, getOpenAIKey, getSettings } from "@/lib/storage/settings";
+import { getSettings } from "@/lib/storage/settings";
 import { saveGeneration } from "@/lib/storage/generations";
 
 export const runtime = "nodejs";
@@ -40,29 +33,17 @@ export async function POST(request: Request) {
     if (!adapter.supportedKinds.includes(kind)) return NextResponse.json({ message: "Adapter hiện tại không hỗ trợ loại tài nguyên này." }, { status: 400 });
     const context = { kind, provider: settings.provider } as const;
     const generationRecipe = adapter.getGenerationRecipe(context);
-    let visual: GeneratedVisual;
-    if (settings.provider === "manual") {
-      visual = await new ManualImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType });
-    } else if (settings.provider === "openai") {
-      if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
-      if (settings.openaiAuthMode === "codex-oauth") {
-        const model = settings.imageModel === "auto" ? codexImageModels[0].id : settings.imageModel;
-        visual = await new CodexOAuthImageProvider().generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
-      } else {
-        const apiKey = await getOpenAIKey();
-        if (!apiKey) return NextResponse.json({ message: "Hãy thêm khóa OpenAI trong Cài đặt trước khi tạo ảnh." }, { status: 400 });
-        const availableModels = await discoverImageModels(apiKey);
-        const model = resolveImageModel(settings.imageModel, availableModels);
-        visual = await new OpenAIImageProvider(apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
-      }
-    } else {
-      if (!prompt && !referenceImage) return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
-      const apiKey = await getNineRouterKey();
-      const availableModels = await discoverNineRouterImageModels(settings.nineRouterUrl, apiKey);
-      const model = settings.imageModel === "auto" ? availableModels[0]?.id : settings.imageModel;
-      if (!model) return NextResponse.json({ message: "Hãy nhập model ảnh 9Router." }, { status: 400 });
-      visual = await new NineRouterImageProvider(settings.nineRouterUrl, apiKey).generate({ kind, prompt, referenceImage, referenceMimeType, model, generationRecipe });
+    if (settings.provider !== "manual" && !prompt && !referenceImage) {
+      return NextResponse.json({ message: "Hãy thêm ý tưởng hoặc ảnh tham chiếu." }, { status: 400 });
     }
+    const visual = await generateVisual(settings.provider, {
+      settings,
+      kind,
+      prompt,
+      referenceImage,
+      referenceMimeType,
+      generationRecipe,
+    });
     const normalized = await normalizeImage(visual.buffer, adapter.getNormalizeOptions(context));
     const output = await adapter.transform(normalized, context);
     const validation = await adapter.validate(output);
@@ -76,7 +57,7 @@ export async function POST(request: Request) {
       validation,
     });
   } catch (error) {
-    if (error instanceof Error && /^(Ảnh nguồn|Không thể xác định|Thêm ảnh nguồn|Đường dẫn)/.test(error.message)) {
+    if (error instanceof Error && /^(Ảnh nguồn|Không thể xác định|Thêm ảnh nguồn|Đường dẫn|Hãy)/.test(error.message)) {
       console.error("Deterministic asset processing failed", error);
       return NextResponse.json({ message: error.message }, { status: 400 });
     }

@@ -1,4 +1,5 @@
 import type { AssetKind } from "../assets/types";
+import type { ProviderId } from "./catalog";
 
 export interface ProviderGenerateInput {
   kind: AssetKind;
@@ -12,13 +13,13 @@ export interface ProviderGenerateInput {
 export interface GeneratedVisual {
   buffer: Buffer;
   mimeType: string;
-  provider: "openai" | "nine-router" | "manual";
+  provider: ProviderId;
   model?: string;
   revisedPrompt?: string;
 }
 
 export interface AssetGenerationProvider {
-  readonly id: "openai" | "nine-router" | "manual";
+  readonly id: ProviderId;
   readonly label: string;
   readonly canGenerateFromText: boolean;
   readonly canEditImage: boolean;
