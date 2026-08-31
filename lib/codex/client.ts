@@ -94,11 +94,17 @@ export async function generateCodexOAuthImage(input: { model: string; prompt: st
     content.push({ type: "input_text", text: "</image>" });
   }
   content.push({ type: "input_text", text: input.prompt });
+  // The ChatGPT/Codex image-generation tool does not expose the same
+  // `background: "transparent"` option as the public Images API. Sending
+  // that field makes otherwise valid Codex image requests fail with HTTP 400
+  // ("Transparent background is not supported for this model."). The asset
+  // pipeline removes a flat background during normalization, so leave the
+  // tool option out and keep the prompt/provider contract intact.
   const body = {
     model: input.model.endsWith("-image") ? input.model.slice(0, -6) : input.model,
     instructions: "",
     input: [{ type: "message", role: "user", content }],
-    tools: [{ type: "image_generation", output_format: "png", size: "1024x1024", quality: "medium", background: "transparent" }],
+    tools: [{ type: "image_generation", output_format: "png", size: "1024x1024", quality: "medium" }],
     tool_choice: "auto", parallel_tool_calls: false, prompt_cache_key: randomUUID(), stream: true, store: false, reasoning: null,
   };
 
