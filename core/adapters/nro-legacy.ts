@@ -94,6 +94,7 @@ export class NroLegacyAdapter implements AssetAdapter {
   }
 
   async transformCharacterAsset(asset: CharacterAsset): Promise<AdapterOutput> {
+    if (asset.generationMode === "reference-static") return this.transformStaticReference(asset);
     const frames = [...asset.parts.head.frames, ...asset.parts.body.frames, ...asset.parts.leg.frames];
     const files: AdapterFile[] = [];
     for (const part of ["head", "body", "leg"] as const) {
@@ -128,6 +129,48 @@ export class NroLegacyAdapter implements AssetAdapter {
       preview: { buffer: asset.previewFrames[0].buffer, width: 64, height: 128, mimeType: "image/png" },
       previewFrames: asset.previewFrames,
       metadata: { characterAsset: true, templateId: asset.templateId, status: asset.status, pipeline: asset.pipeline, poseMappings, frameCount: frames.length, smallImages: atlasEntries },
+    };
+  }
+
+  private async transformStaticReference(asset: CharacterAsset): Promise<AdapterOutput> {
+    const head = asset.parts.head.frames[0];
+    const body = asset.parts.body.frames[0];
+    const leg = asset.parts.leg.frames[0];
+    const preview = asset.previewFrames[0];
+    if (!head?.buffer || !body?.buffer || !leg?.buffer || !preview?.buffer) {
+      throw new Error("Ảnh nguồn chưa thể tách đủ HEAD, BODY và LEG.");
+    }
+    const manifest = {
+      type: "character",
+      status: asset.status,
+      parts: {
+        head: "sprites/head.png",
+        body: "sprites/body.png",
+        leg: "sprites/leg.png",
+      },
+    };
+    const files: AdapterFile[] = [
+      { path: "sprites/head.png", buffer: head.buffer, mimeType: "image/png" },
+      { path: "sprites/body.png", buffer: body.buffer, mimeType: "image/png" },
+      { path: "sprites/leg.png", buffer: leg.buffer, mimeType: "image/png" },
+      { path: "preview/character.png", buffer: preview.buffer, mimeType: "image/png" },
+      { path: "manifest.json", buffer: Buffer.from(JSON.stringify(manifest, null, 2)), mimeType: "application/json" },
+    ];
+    return {
+      adapterId: this.id,
+      kind: "character",
+      files,
+      preview: { buffer: preview.buffer, width: preview.width, height: preview.height, mimeType: "image/png" },
+      metadata: {
+        characterAsset: true,
+        staticReference: true,
+        templateId: asset.templateId,
+        status: asset.status,
+        pipeline: asset.pipeline,
+        referenceAnalysis: asset.referenceAnalysis,
+        frameCount: 3,
+        partFiles: manifest.parts,
+      },
     };
   }
 
@@ -183,6 +226,48 @@ export class NroLegacyAdapter implements AssetAdapter {
           { id: "format", label: "Định dạng PNG hợp lệ", passed: spriteReady },
           { id: "sprite", label: "Sprite NRO đã tạo", passed: spriteReady },
           { id: "metadata", label: "Metadata SmallImage đã tạo", passed: Array.isArray(output.metadata.smallImages) },
+        ],
+      };
+    }
+    if (output.metadata.staticReference === true) {
+      const available = new Set(output.files.map((file) => file.path));
+      const requiredParts = ["sprites/head.png", "sprites/body.png", "sprites/leg.png"];
+      const partsPresent = requiredParts.every((path) => available.has(path));
+      const partChecks = await Promise.all(requiredParts.map(async (path) => {
+        const file = output.files.find((candidate) => candidate.path === path);
+        if (!file) return { visible: false, transparent: false, sized: false };
+        try {
+          const { data, info } = await sharp(file.buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+          let visible = 0;
+          let transparent = false;
+          for (let offset = 0; offset < data.length; offset += info.channels) {
+            if (data[offset + 3] > 12) visible += 1;
+            if (data[offset + 3] < 250) transparent = true;
+          }
+          return { visible: visible >= 12, transparent, sized: info.width === 64 && info.height === 64 };
+        } catch {
+          return { visible: false, transparent: false, sized: false };
+        }
+      }));
+      const analysis = output.metadata.referenceAnalysis as CharacterAsset["referenceAnalysis"] | undefined;
+      const backgroundReady = analysis?.backgroundRemoved === true;
+      const sourceComplete = analysis?.sourceComplete === true;
+      const partsReady = partsPresent && partChecks.every((check) => check.visible && check.sized);
+      const transparencyReady = partChecks.every((check) => check.transparent);
+      const previewReady = available.has("preview/character.png") && output.preview.width === 64 && output.preview.height === 128;
+      const similarityReady = typeof analysis?.similarity === "number" && analysis.similarity >= 0.985;
+      const manifestReady = available.has("manifest.json");
+      const ready = backgroundReady && sourceComplete && partsReady && transparencyReady && previewReady && similarityReady && manifestReady;
+      return {
+        ready,
+        status: ready ? "static-ready" : "draft",
+        checks: [
+          { id: "source-complete", label: "Ảnh nguồn giữ đủ đầu, tay và chân", passed: sourceComplete },
+          { id: "background", label: "Nền đã được làm trong suốt", passed: backgroundReady && transparencyReady },
+          { id: "parts", label: "HEAD, BODY và LEG lấy trực tiếp từ ảnh", passed: partsReady },
+          { id: "similarity", label: "Preview giữ màu và silhouette của ảnh gốc", passed: similarityReady },
+          { id: "preview", label: "Preview được ghép lại từ ba part", passed: previewReady },
+          { id: "manifest", label: "Manifest static đã tạo", passed: manifestReady },
         ],
       };
     }

@@ -38,8 +38,8 @@ export interface CharacterPoseMapping {
   legOffset: Offset;
 }
 
-export type CharacterGenerationMode = "ai" | "template-reference" | "template-random";
-export type CharacterAssetStatus = "draft" | "playable" | "game-ready";
+export type CharacterGenerationMode = "ai" | "reference-static" | "template-reference" | "template-random";
+export type CharacterAssetStatus = "draft" | "static-ready" | "playable" | "game-ready";
 
 export interface CharacterAsset {
   id: string;
@@ -50,5 +50,12 @@ export interface CharacterAsset {
   poses: CharacterPoseMapping[];
   previewFrames: Array<{ poseId: string; state: CharacterPose["state"]; buffer: Buffer; width: number; height: number }>;
   status: CharacterAssetStatus;
-  pipeline?: { designMaster: "ai" | "reference" | "template"; poseSource: "ai" | "template" };
+  pipeline?: { designMaster: "ai" | "reference" | "template"; poseSource: "ai" | "template" | "static" };
+  referenceAnalysis?: {
+    backgroundRemoved: boolean;
+    sourceComplete: boolean;
+    partsReady: boolean;
+    similarity: number;
+    splitRows: { headEnd: number; bodyEnd: number };
+  };
 }

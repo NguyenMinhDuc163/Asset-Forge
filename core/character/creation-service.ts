@@ -2,6 +2,7 @@ import type { AppSettings } from "@/lib/storage/settings";
 import { getNineRouterKey, getOpenAIKey, hasCodexOAuth } from "@/lib/storage/settings";
 import { normalizeImage } from "@/core/image/normalize";
 import { createDesignMasterCharacter, createPoseSheetCharacter, createTemplateCharacter, isHumanoidCompatible } from "@/core/character-template/engine";
+import { createReferenceStaticCharacter, processReferenceCharacter } from "./reference-first";
 import { generateVisual } from "@/core/providers/generate";
 import type { GeneratedVisual } from "@/core/providers/types";
 import type { CharacterAsset, CharacterGenerationMode } from "./types";
@@ -54,6 +55,25 @@ export async function hasCharacterAiAccess(settings: AppSettings) {
 
 export async function createCharacter(input: CharacterCreationInput): Promise<CharacterCreationResult> {
   const mode = resolveCreationMode({ settings: input.settings, hasAiAccess: await hasCharacterAiAccess(input.settings), hasReference: Boolean(input.referenceImage?.length), hasPrompt: Boolean(input.prompt.trim()) });
+  if (mode === "reference-static") {
+    if (!input.referenceImage?.length) throw new Error("Hãy thêm ảnh nguồn để xử lý nhân vật Không AI.");
+    const processed = await processReferenceCharacter(input.referenceImage);
+    if (!await isHumanoidCompatible(processed.normalized.buffer)) {
+      throw new Error("Ảnh nguồn cần hiển thị đầy đủ một nhân vật đứng, rõ đầu, thân và chân.");
+    }
+    const reference = await createReferenceStaticCharacter({
+      name: input.name,
+      processed: processed.normalized.buffer,
+      backgroundRemoved: processed.backgroundRemoved,
+      sourceComplete: processed.sourceComplete,
+    });
+    return {
+      mode: "reference-static",
+      visual: { buffer: input.referenceImage, mimeType: input.referenceMimeType || "image/png", provider: "manual" },
+      normalized: processed.normalized,
+      asset: reference.asset,
+    };
+  }
   if (mode === "template-random" || mode === "template-reference") {
     const normalizedReference = input.referenceImage?.length
       ? await normalizeImage(input.referenceImage, { width: 192, height: 192, pixelArt: true, paletteColours: 128, removeSolidBackground: true })

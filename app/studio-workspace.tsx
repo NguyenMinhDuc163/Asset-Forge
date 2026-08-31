@@ -10,6 +10,7 @@ import { getProviderDefinition, providerCatalog } from "@/core/providers/catalog
 const assetKinds = ["Character", "Environment", "Item", "Effect"] as const;
 type AssetKind = (typeof assetKinds)[number];
 type StudioState = "empty" | "creating" | "ready" | "error";
+type AssetStatus = "draft" | "static-ready" | "playable" | "game-ready";
 type AnimationState = "idle" | "run" | "jump" | "fall" | "attack" | "hurt";
 interface AnimationFrame { poseId: string; state: string; base64: string; mimeType: string; width: number; height: number }
 interface BrowserFileHandle { createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }
@@ -21,6 +22,8 @@ export function StudioWorkspace() {
   const [assetKind, setAssetKind] = useState<AssetKind>("Character");
   const [prompt, setPrompt] = useState("");
   const [reference, setReference] = useState<File | null>(null);
+  const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
+  const [processedPreviewUrl, setProcessedPreviewUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [studioState, setStudioState] = useState<StudioState>("empty");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -30,7 +33,7 @@ export function StudioWorkspace() {
   const [directoryHandle, setDirectoryHandle] = useState<BrowserDirectoryHandle | null>(null);
   const [projectLabel, setProjectLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [resultMeta, setResultMeta] = useState({ adapter: "NRO Legacy", width: 64, height: 128, status: "draft" as "draft" | "playable" | "game-ready", checks: [] as string[] });
+  const [resultMeta, setResultMeta] = useState({ adapter: "NRO Legacy", width: 64, height: 128, status: "draft" as AssetStatus, checks: [] as string[] });
   const [generationId, setGenerationId] = useState("");
   const [animationFrames, setAnimationFrames] = useState<AnimationFrame[]>([]);
   const [animationState, setAnimationState] = useState<AnimationState>("idle");
@@ -49,8 +52,13 @@ export function StudioWorkspace() {
   const activeProvider = providerCopy[provider];
   const activeProviderDefinition = getProviderDefinition(provider);
   const requiresReference = activeProviderDefinition.requiresReference;
+  const isReferenceFirst = provider === "manual" && assetKind === "Character";
+  const exportReady = resultMeta.status === "game-ready" || resultMeta.status === "static-ready";
   const remoteProviders = providerCatalog.filter((item) => item.kind === "remote");
   const stateLabels: Record<AnimationState, string> = { idle: t.animationIdle, run: t.animationRun, jump: t.animationJump, fall: t.animationFall, attack: t.animationAttack, hurt: t.animationHurt };
+  const creationStages = isReferenceFirst
+    ? [t.stageSource, t.stageCleanup, t.stageParts, t.stageSimilarity]
+    : [t.stagePreparing, t.stageDesign, t.stageFrames, t.stageValidation];
   const stateFrames = animationFrames.filter((frame) => frame.state === animationState);
   const displayedFrame = stateFrames[animationIndex % Math.max(1, stateFrames.length)] || animationFrames[0];
   const handleSettingsSaved = useCallback((settings: { provider: ProviderId; locale: Locale; projectRoot: string; theme: ThemePreference; exportMode: ExportMode; creationMode: CreationMode }) => {
@@ -82,9 +90,9 @@ export function StudioWorkspace() {
   }, []);
 
   useEffect(() => {
-    if (!previewUrl) return;
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
+    if (!sourcePreviewUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(sourcePreviewUrl);
+  }, [sourcePreviewUrl]);
 
   useEffect(() => {
     if (!animationPlaying || stateFrames.length < 2 || studioState !== "ready") return;
@@ -101,7 +109,10 @@ export function StudioWorkspace() {
   function acceptFile(file?: File) {
     if (file?.type.startsWith("image/")) {
       setReference(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      setSourcePreviewUrl(URL.createObjectURL(file));
+      setProcessedPreviewUrl(null);
+      setPreviewUrl(null);
+      setAnimationFrames([]);
       setStudioState("empty");
     }
   }
@@ -117,6 +128,7 @@ export function StudioWorkspace() {
   }
 
   async function createAsset() {
+    if (provider === "manual" && !reference) return;
     if (!prompt.trim() && !reference && assetKind !== "Character") return;
     setStudioState("creating");
     setCreationStep(0);
@@ -127,8 +139,19 @@ export function StudioWorkspace() {
     if (reference) form.set("reference", reference);
     try {
       const response = await fetch("/api/assets/create", { method: "POST", body: form });
-      const result = await response.json() as { generationId?: string; image?: { base64: string; mimeType: string; width: number; height: number }; adapter?: { label: string }; validation?: { status: "draft" | "playable" | "game-ready"; checks: Array<{ label: string; passed: boolean }> }; animation?: AnimationFrame[]; message?: string };
+      const result = await response.json() as {
+        generationId?: string;
+        image?: { base64: string; mimeType: string; width: number; height: number };
+        sourceImage?: { base64: string; mimeType: string };
+        processedImage?: { base64: string; mimeType: string; width: number; height: number };
+        adapter?: { label: string };
+        validation?: { status: AssetStatus; checks: Array<{ label: string; passed: boolean }> };
+        animation?: AnimationFrame[];
+        message?: string;
+      };
       if (!response.ok || !result.image) throw new Error(result.message || t.createError);
+      if (result.sourceImage) setSourcePreviewUrl(`data:${result.sourceImage.mimeType};base64,${result.sourceImage.base64}`);
+      setProcessedPreviewUrl(result.processedImage ? `data:${result.processedImage.mimeType};base64,${result.processedImage.base64}` : null);
       setPreviewUrl(`data:${result.image.mimeType};base64,${result.image.base64}`);
       setResultMeta({ adapter: result.adapter?.label || "Game adapter", width: result.image.width, height: result.image.height, status: result.validation?.status || "draft", checks: result.validation?.checks.filter((check) => check.passed).map((check) => check.label) || [] });
       setGenerationId(result.generationId || "");
@@ -197,6 +220,9 @@ export function StudioWorkspace() {
 
   async function changeProvider(nextProvider: ProviderId) {
     setProvider(nextProvider);
+    setProcessedPreviewUrl(null);
+    setPreviewUrl(null);
+    setAnimationFrames([]);
     setStudioState("empty");
     await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: nextProvider, imageModel: "auto" }) }).catch(() => undefined);
   }
@@ -223,6 +249,16 @@ export function StudioWorkspace() {
     setExportMode("download");
     setDirectoryHandle(null);
     await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exportMode: "download" }) }).catch(() => undefined);
+  }
+
+  function tryAgain() {
+    setProcessedPreviewUrl(null);
+    setPreviewUrl(null);
+    setAnimationFrames([]);
+    setGenerationId("");
+    setExportStatus("idle");
+    setExportMessage("");
+    setStudioState("empty");
   }
 
   return (
@@ -312,7 +348,7 @@ export function StudioWorkspace() {
             />
 
             <div className="my-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--faint)]">
-              <span className="h-px flex-1 bg-[var(--line)]" />{t.optionalReference}<span className="h-px flex-1 bg-[var(--line)]" />
+              <span className="h-px flex-1 bg-[var(--line)]" />{isReferenceFirst ? t.sourceImage : t.optionalReference}<span className="h-px flex-1 bg-[var(--line)]" />
             </div>
 
             <div
@@ -328,7 +364,7 @@ export function StudioWorkspace() {
               <div className="grid size-11 shrink-0 place-items-center rounded-[10px] border border-[var(--line)] bg-[var(--surface)] text-xl text-[var(--accent-strong)]">+</div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{reference ? reference.name : t.dropImage}</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{reference ? t.referenceReady : t.fileHelp}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{reference ? (isReferenceFirst ? t.referencePreserveHelp : t.referenceReady) : t.fileHelp}</p>
               </div>
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={handleFileChange} />
             </div>
@@ -338,17 +374,16 @@ export function StudioWorkspace() {
                 <span>{activeProvider.description}</span>
                 <button type="button" className="font-medium text-[var(--ink)] underline decoration-[var(--line-strong)] underline-offset-4" onClick={() => setSettingsOpen(true)}>{t.change}</button>
               </div>
-              {requiresReference && !reference && assetKind !== "Character" && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.manualNeedsImage}</p>}
-              {provider === "manual" && !reference && assetKind === "Character" && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.createVariationHelp}</p>}
-              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference && assetKind !== "Character") || (requiresReference && !reference && assetKind !== "Character") || studioState === "creating"} className="primary-button w-full">
-                {studioState === "creating" ? t.creating : !prompt.trim() && !reference ? t.createVariation : t.create}
+              {requiresReference && !reference && <p className="mb-3 rounded-[10px] bg-[var(--soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{t.manualNeedsImage}</p>}
+              <button type="button" onClick={createAsset} disabled={(!prompt.trim() && !reference && assetKind !== "Character") || (requiresReference && !reference) || studioState === "creating"} className="primary-button w-full">
+                {studioState === "creating" ? t.creating : isReferenceFirst ? t.processReference : !prompt.trim() && !reference ? t.createVariation : t.create}
               </button>
             </div>
           </div>
 
           <div className="relative flex min-h-[500px] flex-col bg-[var(--preview)] p-4 sm:p-6 lg:p-8">
             <div className="mb-4 flex items-center justify-between">
-              <div><p className="text-sm font-semibold">{t.gamePreview}</p><p className="mt-0.5 text-xs text-[var(--muted)]">{resultMeta.adapter} {t.profile}</p></div>
+              <div><p className="text-sm font-semibold">{isReferenceFirst ? t.referencePipeline : t.gamePreview}</p><p className="mt-0.5 text-xs text-[var(--muted)]">{isReferenceFirst ? t.referencePipelineHelp : `${resultMeta.adapter} ${t.profile}`}</p></div>
               <span className="rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">{resultMeta.width} × {resultMeta.height}</span>
             </div>
 
@@ -356,15 +391,33 @@ export function StudioWorkspace() {
               {studioState === "creating" ? (
                 <div className="w-full max-w-sm px-8 text-center">
                   <div className="mb-5 h-2 overflow-hidden rounded-full bg-[var(--line)]"><div className="forge-progress h-full w-1/2 rounded-full bg-[var(--accent)]" /></div>
-                  <p className="text-sm font-semibold">{t.preparing}</p>
+                  <p className="text-sm font-semibold">{isReferenceFirst ? t.preservingReference : t.preparing}</p>
                   <div className="mt-4 space-y-2 text-left text-xs text-[var(--muted)]">
-                    {[t.stagePreparing, t.stageDesign, t.stageFrames, t.stageValidation].map((step, index) => <p key={step} className={`flex items-center gap-2 ${index <= creationStep ? "text-[var(--ink)]" : "text-[var(--faint)]"}`}><span className="grid size-4 place-items-center rounded-full border border-current font-mono text-[9px]">{index < creationStep ? "✓" : index === creationStep ? "•" : ""}</span>{step}</p>)}
+                    {creationStages.map((step, index) => <p key={step} className={`flex items-center gap-2 ${index <= creationStep ? "text-[var(--ink)]" : "text-[var(--faint)]"}`}><span className="grid size-4 place-items-center rounded-full border border-current font-mono text-[9px]">{index < creationStep ? "✓" : index === creationStep ? "•" : ""}</span>{step}</p>)}
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t.normalizing}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{isReferenceFirst ? t.referenceProcessingHelp : t.normalizing}</p>
                 </div>
-              ) : previewUrl ? (
+              ) : isReferenceFirst ? (
+                <div className="grid w-full max-w-[820px] gap-3 p-3 sm:grid-cols-3 sm:gap-4 sm:p-5">
+                  {[
+                    { label: t.source, note: t.originalImage, url: sourcePreviewUrl, alt: t.sourcePreview },
+                    { label: t.processed, note: t.backgroundCleaned, url: processedPreviewUrl, alt: t.processedPreview },
+                    { label: t.gamePreview, note: "64 × 128", url: previewUrl, alt: t.characterPreview },
+                  ].map((panel) => (
+                    <figure key={panel.label} className="min-w-0">
+                      <div className="relative min-h-56 overflow-hidden rounded-[11px] border border-[var(--line)] bg-[var(--surface)] shadow-[0_12px_34px_rgba(49,41,31,0.08)] sm:aspect-[3/4] sm:min-h-0">
+                        {panel.url ? <Image src={panel.url} alt={panel.alt} fill unoptimized className="object-contain p-3" /> : <div className="absolute inset-0 grid place-items-center"><span className="font-mono text-xs text-[var(--faint)]">—</span></div>}
+                      </div>
+                      <figcaption className="mt-3 flex items-baseline justify-between gap-2">
+                        <span className="text-xs font-semibold text-[var(--ink)]">{panel.label}</span>
+                        <span className="truncate font-mono text-[9px] uppercase tracking-[0.08em] text-[var(--faint)]">{panel.note}</span>
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              ) : (previewUrl || sourcePreviewUrl) ? (
                 <div className="relative size-[min(64vw,330px)] max-h-[330px] max-w-[330px] overflow-hidden rounded-[12px] border border-[var(--line-strong)] bg-[var(--surface)] shadow-[0_18px_50px_rgba(49,41,31,0.13)]">
-                  <Image src={displayedFrame ? `data:${displayedFrame.mimeType};base64,${displayedFrame.base64}` : previewUrl} alt={displayedFrame ? `${t.characterPreview} ${stateLabels[animationState]}` : t.uploadedPreview} fill unoptimized className="object-contain [image-rendering:pixelated]" />
+                  <Image src={displayedFrame ? `data:${displayedFrame.mimeType};base64,${displayedFrame.base64}` : (previewUrl || sourcePreviewUrl)!} alt={displayedFrame ? `${t.characterPreview} ${stateLabels[animationState]}` : t.uploadedPreview} fill unoptimized className="object-contain [image-rendering:pixelated]" />
                 </div>
               ) : (
                 <div className="max-w-xs px-6 text-center">
@@ -385,8 +438,8 @@ export function StudioWorkspace() {
               {studioState === "ready" ? (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className={`text-sm font-semibold ${resultMeta.status === "game-ready" ? "text-[var(--success)]" : resultMeta.status === "playable" ? "text-[var(--accent-strong)]" : "text-[var(--muted)]"}`}>{resultMeta.status === "game-ready" ? t.gameReady : resultMeta.status === "playable" ? t.playable : t.draft}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
-                  <div className="flex gap-2"><button type="button" className="control-button" onClick={() => setStudioState("empty")}>{t.tryAnother}</button><button type="button" className="primary-button px-6" onClick={exportAsset} disabled={exportStatus === "exporting" || resultMeta.status !== "game-ready"} title={resultMeta.status !== "game-ready" ? t.exportNeedsReady : undefined}>{exportStatus === "exporting" ? t.exporting : t.export}</button></div>
+                  <div><p className={`text-sm font-semibold ${exportReady ? "text-[var(--success)]" : resultMeta.status === "playable" ? "text-[var(--accent-strong)]" : "text-[var(--muted)]"}`}>{resultMeta.status === "static-ready" ? t.staticReady : resultMeta.status === "game-ready" ? t.gameReady : resultMeta.status === "playable" ? t.playable : t.draft}</p><p className="mt-1 text-xs text-[var(--muted)]">{resultMeta.checks.join(", ")}</p></div>
+                  <div className="flex gap-2"><button type="button" className="control-button" onClick={tryAgain}>{t.tryAgain}</button><button type="button" className="primary-button px-6" onClick={exportAsset} disabled={exportStatus === "exporting" || !exportReady} title={!exportReady ? t.exportNeedsReady : undefined}>{exportStatus === "exporting" ? t.exporting : t.export}</button></div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
                     <span className="mr-1 text-xs font-semibold text-[var(--muted)]">{t.exportDestination}</span>

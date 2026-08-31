@@ -18,7 +18,7 @@ export interface GenerationRecord {
   requestHash?: string;
   status: ValidationResult["status"];
   template?: string;
-  generation?: { mode: "ai" | "template" | "generic"; detail?: CharacterGenerationMode };
+  generation?: { mode: "ai" | "reference" | "template" | "generic"; detail?: CharacterGenerationMode };
   animations?: string[];
   character?: {
     templateId: string;
@@ -97,8 +97,8 @@ export async function saveGeneration(input: {
     status: input.validation.status,
     ...(input.characterAsset ? {
       template: input.characterAsset.templateId,
-      generation: { mode: input.characterAsset.generationMode === "ai" ? "ai" : "template", detail: input.characterAsset.generationMode },
-      animations: [...new Set(input.characterAsset.poses.map((pose) => pose.state))],
+      generation: { mode: input.characterAsset.generationMode === "ai" ? "ai" : input.characterAsset.generationMode === "reference-static" ? "reference" : "template", detail: input.characterAsset.generationMode },
+      ...(input.characterAsset.generationMode !== "reference-static" ? { animations: [...new Set(input.characterAsset.poses.map((pose) => pose.state))] } : {}),
       character: {
         templateId: input.characterAsset.templateId,
         generationMode: input.characterAsset.generationMode,

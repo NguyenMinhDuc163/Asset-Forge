@@ -97,15 +97,20 @@ export async function POST(request: Request) {
       output = await adapter.transform(normalized, context);
     }
     const validation = await adapter.validate(output);
-    if (!validation.ready) return NextResponse.json({ message: "Ảnh này chưa thể chuyển đổi an toàn cho game profile đã chọn. Hãy thử ảnh khác." }, { status: 422 });
+    const staticReference = characterAsset?.generationMode === "reference-static";
+    if (!validation.ready && !staticReference) return NextResponse.json({ message: "Ảnh này chưa thể chuyển đổi an toàn cho game profile đã chọn. Hãy thử ảnh khác." }, { status: 422 });
     const generation = await saveGeneration({ name: prompt || `${kind}-asset`, kind, source: visual, normalized, output, validation, characterAsset, creationMode, requestHash, intermediate });
     return NextResponse.json({
       generationId: generation.id,
       image: { base64: output.preview.buffer.toString("base64"), mimeType: output.preview.mimeType, width: output.preview.width, height: output.preview.height },
+      ...(staticReference ? {
+        sourceImage: { base64: visual.buffer.toString("base64"), mimeType: visual.mimeType },
+        processedImage: { base64: normalized.buffer.toString("base64"), mimeType: "image/png", width: normalized.width, height: normalized.height },
+      } : {}),
       source: { provider: visual.provider, model: visual.model },
       adapter: { id: output.adapterId, label: adapter.label },
       validation,
-      asset: characterAsset ? { templateId: characterAsset.templateId, generationMode: characterAsset.generationMode, pipeline: characterAsset.pipeline, status: validation.status, animationStates: [...new Set(characterAsset.poses.map((pose) => pose.state))] } : undefined,
+      asset: characterAsset ? { templateId: characterAsset.templateId, generationMode: characterAsset.generationMode, pipeline: characterAsset.pipeline, status: validation.status, animationStates: staticReference ? [] : [...new Set(characterAsset.poses.map((pose) => pose.state))] } : undefined,
       animation: output.previewFrames?.map((frame) => ({ poseId: frame.poseId, state: frame.state, base64: frame.buffer.toString("base64"), mimeType: "image/png", width: frame.width, height: frame.height })),
     });
   } catch (error) {

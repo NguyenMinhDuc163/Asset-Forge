@@ -14,14 +14,15 @@ export async function renderCharacterPose(asset: CharacterAsset, pose: Character
     if (!frame?.buffer) throw new Error(`Missing character frame ${frameId}.`);
     return { input: frame.buffer, left, top };
   };
-  return sharp({ create: { ...canvas, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+  const rendered = sharp({ create: { ...canvas, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([
       layer(pose.legFrame, pose.legOffset.x, 64 + pose.legOffset.y),
       layer(pose.bodyFrame, pose.bodyOffset.x, 32 + pose.bodyOffset.y),
       layer(pose.headFrame, pose.headOffset.x, pose.headOffset.y),
-    ])
-    .png({ palette: true, colours: 128 })
-    .toBuffer();
+    ]);
+  return asset.generationMode === "reference-static"
+    ? rendered.png({ compressionLevel: 9 }).toBuffer()
+    : rendered.png({ palette: true, colours: 128 }).toBuffer();
 }
 
 export async function renderCharacterPreview(asset: CharacterAsset, state = "idle") {

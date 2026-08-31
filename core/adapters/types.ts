@@ -25,7 +25,7 @@ export interface AdapterOutput {
 
 export interface ValidationResult {
   ready: boolean;
-  status: "draft" | "playable" | "game-ready";
+  status: "draft" | "static-ready" | "playable" | "game-ready";
   checks: Array<{ id: string; label: string; passed: boolean; message?: string }>;
 }
 
